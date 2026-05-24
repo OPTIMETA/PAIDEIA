@@ -38,7 +38,12 @@ _MSG: dict[str, dict[str, str]] = {
 
 
 def t(key: str, lang: str, **kw: object) -> str:
-    """Return the localized message for `key`, defaulting to English on missing lang."""
+    """Return the localized message for `key`, defaulting to English on missing lang.
+
+    Uses `or` (not `is None`): an explicitly empty translation value also
+    falls through to the English bundle. That's intentional here — a blank
+    line at session start would be more confusing than a silent en fallback.
+    """
     bundle = _MSG.get(key, {})
     template = bundle.get(lang) or bundle.get("en", key)
     return template.format(**kw) if kw else template
@@ -140,7 +145,11 @@ def main() -> int:
         return 0
 
     name = meta.get("COURSE_NAME", "course")
-    lang = meta.get("INTERFACE_LANG", "en").strip().lower()
+    # Strip trailing `# comment` so an annotated INTERFACE_LANG line still parses
+    # (e.g., `INTERFACE_LANG: ko # main course language`). The generic
+    # parse_meta() regex would otherwise capture the comment verbatim and the
+    # membership check below would silently fall back to en.
+    lang = meta.get("INTERFACE_LANG", "en").split("#", 1)[0].strip().lower()
     if lang not in {"en", "ko"}:
         lang = "en"
     days = days_until(meta.get("EXAM_DATE", ""))

@@ -5,7 +5,7 @@ argument-hint: "[--ocr=claude|ollama|tesseract] [optional path to answer file; d
 
 ## Output language
 
-Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output, grade-table commentary, the OCR quality escape-hatch menu — must be in that language. Keep in English regardless: file paths, slash command names (`/paideia:grade`, `/paideia:blind`, …), pattern IDs (P1, P2…), YAML keys, LaTeX, OCR engine names (`claude`, `ollama`, `tesseract`), and the grade table's column headers (`P#`, `Pattern`, `Vars`, `End form`, `Overall`). Pass `--lang=$INTERFACE_LANG` to `vision_ocr.py` so the VLM keeps the user's handwriting in its original language.
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output, grade-table commentary, the OCR quality escape-hatch menu — must be in that language. Keep in English regardless: file paths, slash command names (`/paideia:grade`, `/paideia:blind`, …), pattern IDs (P1, P2…), YAML keys, LaTeX, OCR engine names (`claude`, `ollama`, `tesseract`), and the grade table's column headers (`P#`, `Pattern`, `Vars`, `End form`, `Overall`). `vision_ocr.py` reads `INTERFACE_LANG` from `.course-meta` on its own to set the VLM's prose-language rule and the tesseract `lang=` code, so the bash invocations below don't need to pass it explicitly.
 
 Load `skills/vision-ocr/SKILL.md`, `skills/pdf/SKILL.md`, and `skills/answer-processing/SKILL.md`.
 
@@ -79,21 +79,19 @@ Follow the answer-processing skill pipeline:
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" --engine=ollama \
-     --lang=$INTERFACE_LANG \
      "answers/<stem>.pdf" "answers/converted/<stem>.md"
    ```
 
-   Uses `qwen3-vl:8b` via ollama. Auto-falls back to tesseract on any exception (timeout / ollama down / model missing). Tier is recorded in the file header. See `skills/vision-ocr/SKILL.md` for details.
+   Uses `qwen3-vl:8b` via ollama. The script reads `INTERFACE_LANG` from `.course-meta` in CWD so the prose-language rule in the VLM prompt matches the course's language. Auto-falls back to tesseract on any exception (timeout / ollama down / model missing). Tier is recorded in the file header. See `skills/vision-ocr/SKILL.md` for details.
 
    ### 2c. `tesseract` — explicit, skip ollama
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" --engine=tesseract \
-     --lang=$INTERFACE_LANG \
      "answers/<stem>.pdf" "answers/converted/<stem>.md"
    ```
 
-   Pure pytesseract (`eng` if `INTERFACE_LANG=en`, `eng+kor` if `ko`). Fastest, lowest fidelity on handwriting.
+   Pure pytesseract (`eng` if the course's `INTERFACE_LANG=en`, `eng+kor` if `ko` — also read from `.course-meta`). Fastest, lowest fidelity on handwriting.
 
 3. **Identify reference solution.** Based on the answer filename stem:
    - `hw3.pdf` → `converted/solutions/hw3_sol.md` (or `converted/solutions/hw3.md`)

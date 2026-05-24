@@ -113,7 +113,9 @@ def read_interface_lang(cwd: Path | None = None) -> str:
         for line in meta_path.read_text(encoding="utf-8", errors="replace").splitlines():
             m = re.match(r"^\s*INTERFACE_LANG\s*:\s*(.+?)\s*$", line)
             if m:
-                v = m.group(1).strip().lower()
+                # Strip trailing `# comment` so an annotated line like
+                # `INTERFACE_LANG: ko # main course language` still parses.
+                v = m.group(1).split("#", 1)[0].strip().lower()
                 if v in _PROSE_RULE:
                     return v
     except OSError:

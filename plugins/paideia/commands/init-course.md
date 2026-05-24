@@ -174,7 +174,7 @@ EOF
 
 If `CLAUDE.md` doesn't exist in CWD, write the paideia template (see `CLAUDE.md.template` below). If it exists, **do not overwrite** — ask the user if they want to append the paideia section instead.
 
-Substitute the 4 metadata values + `OCR_ENGINE` into the template's metadata block before writing.
+Substitute all 6 placeholders (`$COURSE_NAME`, `$EXAM_DATE`, `$EXAM_TYPE`, `$WEAK_ZONES`, `$OCR_ENGINE`, `$INTERFACE_LANG`) into the template's metadata block before writing. The list must stay in sync with the metadata block in the `CLAUDE.md.template` section below.
 
 ### Step 8 — Statusline + SessionStart wiring
 

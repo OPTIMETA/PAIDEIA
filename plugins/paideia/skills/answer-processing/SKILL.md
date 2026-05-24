@@ -29,10 +29,10 @@ If `/grade` was called with an argument, use it as a hint. Otherwise find the mo
 
 ### Step 2: Convert PDF to MD (if PDF)
 
-**Use the `vision-ocr` skill** — delegates to a local VLM (Qwen3-VL 8B via ollama) for clean prose + LaTeX transcription (language follows the scan; pass `--lang=$INTERFACE_LANG` so the model preserves the user's handwriting language), with pytesseract as automatic fallback.
+**Use the `vision-ocr` skill** — delegates to a local VLM (Qwen3-VL 8B via ollama) for clean prose + LaTeX transcription (the script reads `INTERFACE_LANG` from `.course-meta` so the VLM keeps the handwriting in its original language), with pytesseract as automatic fallback.
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" --lang=$INTERFACE_LANG answers/<name>.pdf answers/converted/<name>.md
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" answers/<name>.pdf answers/converted/<name>.md
 ```
 
 The script handles model warmup, page-by-page inference, and tier fallback. See `.claude/skills/vision-ocr/SKILL.md`. The output header tells the grader which tier produced the text:
