@@ -3,6 +3,10 @@ description: Generate a mock exam matched to the course's structure (inferred fr
 argument-hint: "<total minutes, default 90> [optional emphasize=§X,§Y]"
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs, LaTeX, tier markers, and the mock exam's structural labels (`# Mock Exam — <date>`, `**Duration**`, `**Total**`, `## P<n>`).
+
 Load `skills/exam-drill/SKILL.md`. Read `course-index/summary.md`, `course-index/patterns.md`, `course-index/coverage.md`.
 
 Arguments: $ARGUMENTS
@@ -32,7 +36,7 @@ Procedure:
 4. **Print to chat:**
    - The full exam (problem statements with point values and time suggestions)
    - Total points summing to 100 (or inferred weighting)
-   - Closing line: "타이머 $ARGUMENTS분. 종이로 풀고 `answers/mock_<ts>.pdf`에 올린 뒤 `/grade`."
+   - Closing line (in $INTERFACE_LANG): "Timer: $ARGUMENTS min. Solve on paper, upload as `answers/mock_<ts>.pdf`, then `/grade`."
 
 5. **Do NOT** reveal which patterns are being tested in the problem statements. The user should identify them during solving.
 

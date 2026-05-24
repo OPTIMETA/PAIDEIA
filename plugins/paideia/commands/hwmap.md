@@ -3,6 +3,10 @@ description: Show HW/example coverage of course sections from course-index/cover
 argument-hint: [§ number, or "hot" to list exam-primary zones, or "all"]
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs (P1, P2…), tier markers (🔥🔥/🔥/🟡/⚪), and the literal section anchors downstream tools regex on.
+
 Read `course-index/coverage.md`. If missing, tell the user to run `/analyze` first.
 
 Query: $ARGUMENTS
@@ -36,9 +40,9 @@ Render an exam-tier distribution table:
 
 Plus the "Recommended drill priority" section from `coverage.md` (ordered by HW density, not by absence).
 
-**Low-risk section handling.** If the user insists on drilling a ⚪ section, warn once: "HW에 한 번도 안 나온 구간은 시험 출제 확률이 낮아. 시간 없으면 🔥🔥부터." Then comply if they still want to.
+**Low-risk section handling.** If the user insists on drilling a ⚪ section, warn once (in $INTERFACE_LANG): "Sections with no HW have low exam probability. If time is short, start from 🔥🔥." Then comply if they still want to.
 
-**Always close with:**
-"🔥🔥 중에서 지금 당장 드릴 걸 1개만 고른다면? 시간 몇 분 남았어?"
+**Always close with** (in $INTERFACE_LANG):
+"If you could pick just one 🔥🔥 item to drill right now, which one — and how many minutes do you have?"
 
 Output goal: exam-point maximization. Steer time toward HW-dense zones.

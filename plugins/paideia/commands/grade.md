@@ -3,6 +3,10 @@ description: "Grade user's answer PDF (hand-written, scanned) against reference 
 argument-hint: "[--ocr=claude|ollama|tesseract] [optional path to answer file; default = most recent in answers/]"
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output, grade-table commentary, the OCR quality escape-hatch menu — must be in that language. Keep in English regardless: file paths, slash command names (`/paideia:grade`, `/paideia:blind`, …), pattern IDs (P1, P2…), YAML keys, LaTeX, OCR engine names (`claude`, `ollama`, `tesseract`), and the grade table's column headers (`P#`, `Pattern`, `Vars`, `End form`, `Overall`). Pass `--lang=$INTERFACE_LANG` to `vision_ocr.py` so the VLM keeps the user's handwriting in its original language.
+
 Load `skills/vision-ocr/SKILL.md`, `skills/pdf/SKILL.md`, and `skills/answer-processing/SKILL.md`.
 
 Arguments: $ARGUMENTS
@@ -45,7 +49,7 @@ Follow the answer-processing skill pipeline:
 
    This produces `$TMPDIR/page-1.png`, `$TMPDIR/page-2.png`, ... (each ≤1800px wide). Now **use the Read tool on each PNG in order** and synthesize clean markdown yourself, following the transcription prompt contract from `skills/vision-ocr/SKILL.md`:
 
-   - Korean prose stays Korean.
+   - Prose stays in its original language (English, Korean, etc.) — do not translate.
    - Math as `$...$` / `$$...$$`.
    - Preserve problem numbering (P1, (1), (a), ...).
    - Do NOT interpret or grade — pure transcription.
@@ -75,6 +79,7 @@ Follow the answer-processing skill pipeline:
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" --engine=ollama \
+     --lang=$INTERFACE_LANG \
      "answers/<stem>.pdf" "answers/converted/<stem>.md"
    ```
 
@@ -84,10 +89,11 @@ Follow the answer-processing skill pipeline:
 
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" --engine=tesseract \
+     --lang=$INTERFACE_LANG \
      "answers/<stem>.pdf" "answers/converted/<stem>.md"
    ```
 
-   Pure `pytesseract eng+kor`. Fastest, lowest fidelity on hand-writing.
+   Pure pytesseract (`eng` if `INTERFACE_LANG=en`, `eng+kor` if `ko`). Fastest, lowest fidelity on handwriting.
 
 3. **Identify reference solution.** Based on the answer filename stem:
    - `hw3.pdf` → `converted/solutions/hw3_sol.md` (or `converted/solutions/hw3.md`)
@@ -108,7 +114,7 @@ Follow the answer-processing skill pipeline:
    | P# | Pattern | Vars | End form | Overall |
    |---|---|---|---|---|
    ```
-   Plus one closing line: "우세한 실수: <type>. 다음 드릴: /<command> <target>."
+   Plus one closing line (in $INTERFACE_LANG): "Dominant issue: <type>. Next drill: /<command> <target>."
 
 6. **Log errors.** Append each non-✅ entry to `errors/log.md` in the YAML format from answer-processing SKILL.md.
 
@@ -132,14 +138,14 @@ Follow the answer-processing skill pipeline:
 Inspect the `<!-- SOURCE: ... -->` / `<!-- TIER: ... -->` header comment in `answers/converted/<stem>.md` first.
 
 - **Tier 0 (`claude-vision`)** or **Tier 1 (`qwen3-vl:8b`) succeeded:** grade normally. Quality is usually good enough for strategy matching even on messy handwriting.
-- **Tier 1b fallback (`tesseract` auto-fallback)** was used, **Tier 2 (`tesseract` explicit)**, the MD is <100 chars, or mostly garbled:
+- **Tier 1b fallback (`tesseract` auto-fallback)** was used, **Tier 2 (`tesseract` explicit)**, the MD is <100 chars, or mostly garbled — print the menu below in $INTERFACE_LANG, keeping slash commands and paths verbatim:
   ```
-  OCR 결과 품질이 낮음 (채점 신뢰도 떨어짐).
-  옵션:
-    (a) /paideia:grade --ocr=claude <pdf>   ← Claude 비전으로 재시도 (추가 설치 불필요)
-    (b) 더 밝게/크게 재스캔 후 다시 /paideia:grade
-    (c) 답안을 직접 .md로 타이핑해서 `answers/converted/<stem>.md`에 저장 후 다시 /paideia:grade
-    (d) 채점 대신 /paideia:blind <problem-id>로 전략만 말로 체크
+  OCR quality is low (grading reliability degraded).
+  Options:
+    (a) /paideia:grade --ocr=claude <pdf>   ← retry with Claude vision (no extra install)
+    (b) re-scan brighter / larger, then /paideia:grade again
+    (c) type the answer into .md and save it to `answers/converted/<stem>.md`, then /paideia:grade
+    (d) skip grading and use /paideia:blind <problem-id> to verbalize the strategy instead
   ```
 
 ## When both .pdf and .md exist

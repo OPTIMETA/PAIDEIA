@@ -66,7 +66,7 @@ After ingest completes, print a summary table:
 | homework | ... | ... | ... |
 | solutions | ... | ... | ... |
 
-And: "다음은 `/analyze`를 돌려서 patterns/coverage 인덱스를 생성."
+And (in `INTERFACE_LANG` from `.course-meta`, default `en`): "Next: run `/analyze` to generate the patterns / coverage indexes."
 
 ## Phase 2: Analyze
 

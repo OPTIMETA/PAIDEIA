@@ -17,9 +17,9 @@ description: Use whenever a hand-written or scanned answer PDF needs transcripti
 
 | Engine | Default? | How it runs | When to pick it |
 |---|---|---|---|
-| `claude` | **Yes** | `pdftoppm` → Claude reads each PNG via the Read tool → synthesizes markdown inline. No external model. No subprocess. | The out-of-the-box path. Nothing to install. Highest fidelity on messy handwriting because Claude vision is strong at Korean+LaTeX. |
-| `ollama` | opt-in | `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py --engine=ollama <pdf> <md>` — local Qwen3-VL 8B, with an automatic tesseract fall-back if ollama is unreachable. | You want the PDF to never leave the machine *and* you don't want to burn Claude tokens on OCR. Requires one-time `ollama pull qwen3-vl:8b` (~6 GB). |
-| `tesseract` | opt-in | `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py --engine=tesseract <pdf> <md>` — pytesseract eng+kor only. | Zero cloud + no GPU/VRAM budget. Lowest fidelity on handwriting; fine for typed scans. |
+| `claude` | **Yes** | `pdftoppm` → Claude reads each PNG via the Read tool → synthesizes markdown inline. No external model. No subprocess. | The out-of-the-box path. Nothing to install. Highest fidelity on messy handwriting because Claude vision handles mixed-script (English/Korean) prose with LaTeX well. |
+| `ollama` | opt-in | `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py --engine=ollama --lang=$INTERFACE_LANG <pdf> <md>` — local Qwen3-VL 8B, with an automatic tesseract fall-back if ollama is unreachable. | You want the PDF to never leave the machine *and* you don't want to burn Claude tokens on OCR. Requires one-time `ollama pull qwen3-vl:8b` (~6 GB). |
+| `tesseract` | opt-in | `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py --engine=tesseract --lang=$INTERFACE_LANG <pdf> <md>` — pytesseract `eng` (en) or `eng+kor` (ko). | Zero cloud + no GPU/VRAM budget. Lowest fidelity on handwriting; fine for typed scans. |
 
 All three emit `answers/converted/<stem>.md` with a `<!-- SOURCE: ... -->` / `<!-- TIER: ... -->` header comment that lets `/grade` caveat the confidence.
 
@@ -47,7 +47,7 @@ answers/<stem>.pdf
   ↓ base64 JPEG per page
   ↓ [Tier 1a] ollama qwen3-vl:8b
   ↓    (on timeout / ollama down)
-  ↓ [Tier 1b] pytesseract (eng+kor)  ← auto-fallback inside the same script
+  ↓ [Tier 1b] pytesseract (eng or eng+kor, from --lang)  ← auto-fallback inside the same script
 answers/converted/<stem>.md
    └── header:  <!-- SOURCE: <stem>.pdf, qwen3-vl:8b @ 300dpi, N pages -->
                 <!-- TIER: tesseract fallback -->  (only when 1a bombed)
@@ -61,7 +61,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" --engine=ollama <input.pdf
 
 `${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py` is the single source of truth. It:
 1. Warms up the VLM with a 1-token `/api/generate` so the first real page isn't stalled by model load.
-2. Sends each page as a JPEG-encoded base64 image with a Korean-aware, LaTeX-first prompt.
+2. Sends each page as a JPEG-encoded base64 image with a language-aware, LaTeX-first prompt (prose-language rule selected by `INTERFACE_LANG`).
 3. Sets `keep_alive: "15m"` so the model stays in memory across pages within a session.
 4. On any exception (timeout, connection refused) falls back to pytesseract and marks the file.
 
@@ -77,7 +77,7 @@ Skips ollama entirely. Header: `<!-- TIER: tesseract (explicit) -->`.
 
 Whether synthesized by Claude inline (Tier 0) or by Qwen3-VL through this script (Tier 1), the transcription prompt must:
 
-- Keep Korean prose as Korean
+- Keep prose in its original language (English, Korean, etc.) — do not translate
 - Emit math as `$...$` / `$$...$$`
 - Preserve problem numbering (P1, (1), (a), ...)
 - NOT grade or interpret — just transcribe

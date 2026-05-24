@@ -3,6 +3,10 @@ description: Strategy-level blind drill on a known HW or example problem. User d
 argument-hint: <problem-id, e.g. "hw4-p3" or "example-5.2">
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output, clarification questions, and narrative sections of any MD file you write — must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs (P1, P2…), YAML keys (`pattern:`, `error_type:`, `problem_id:`, `source:`, `date:`, `summary:`), LaTeX, code, and the literal section anchors downstream tools regex on (`## One-line verdict`, `## Page N`, `# Vision-OCR transcription`).
+
 Load `skills/exam-drill/SKILL.md`. Read `course-index/patterns.md`.
 
 Target: $ARGUMENTS
@@ -13,13 +17,15 @@ Procedure:
 
 2. **Present the problem verbatim** to the user.
 
-3. **Request strategy** (3–5 lines Korean, no math typing):
+3. **Request strategy** (3–5 lines in $INTERFACE_LANG prose, no math typing). The 3 axes to ask about:
    ```
-   전략만 말해줘 — 수식은 쓸 필요 없음.
-   1) 어느 pattern 쓸 건지 (course-index/patterns.md의 Pk 번호)
-   2) 어떤 변수 고정, 어떤 변수로 전개할지
-   3) 최종 답이 어떤 형태일 거라 예상하는지
+   Strategy only — no equations needed.
+   1) Which pattern(s) will you use? (Pk number from course-index/patterns.md)
+   2) Which variables held fixed; which expanded?
+   3) What form do you expect the final answer to take?
    ```
+
+   Render those three axes in $INTERFACE_LANG.
 
 4. **Wait for response.** Do NOT proceed until the user answers.
 
@@ -45,8 +51,8 @@ Procedure:
    ```
    Map strategy axis → `error_type`: pattern axis → `pattern-missed`, variable axis → `wrong-variable`, end-form axis → `wrong-end-form`.
 
-8. **Close:**
-   "같은 유형 retention 확인하려면 `/twin <id>`로 변형 하나 풀어봐."
+8. **Close** (in $INTERFACE_LANG):
+   "To check retention on the same type, do one variant via `/twin <id>`."
 
 ## Why strategy-based, not full-derivation
 
