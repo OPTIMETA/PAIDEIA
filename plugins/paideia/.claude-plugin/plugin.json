@@ -1,6 +1,6 @@
 {
   "name": "paideia",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Exam-prep workspace for math/physics courses. 14 slash commands + 5 skills to ingest course materials, extract HW-density-weighted patterns, drill via twins/blinds/chains/mocks, and grade hand-written answer PDFs. Every course PDF — lectures, textbook, homework, solutions — is routed through a parallel vision pipeline (one agent per PDF, sequential Read per agent) that transcribes to faithful LaTeX markdown; pdfplumber was tried as a fast path and proved unreliable on real course content. Hand-writing OCR engine is selectable per course: Claude native vision (default, no install), local Qwen3-VL via Ollama, or Tesseract. 0.5.0 adds a per-course statusline (paideia · COURSE · D-N · phase · Pk ↑) wired by init-course.",
   "author": {
     "name": "TaewoooPark",
