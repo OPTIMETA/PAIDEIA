@@ -3,6 +3,10 @@ description: Analyze converted course materials to produce the course knowledge 
 argument-hint: "[optional weak-zone topics to emphasize, comma-separated]"
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output and narrative parts of the generated index MDs — must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs (P1..Pk), tier markers (🔥🔥/🔥/🟡/⚪, ✅✅/✅/🟡/🔴/🔴🔴), § / Ch section anchors, and table column headers (`Problem`, `Primary §`, `Secondary §`, `Patterns`, `HW coverage`, `Exam tier`, etc.) — `weakmap`, `hwmap`, and `quiz` regex on them.
+
 Load `skills/course-builder/SKILL.md`.
 
 Arguments (user's declared weak zones, comma-separated): $ARGUMENTS
@@ -54,8 +58,10 @@ End the file with a "Recommended drill priority" section ranking the top 6 items
 
 After writing all three files, print to chat:
 
+Print the block below, with prose written in $INTERFACE_LANG. Token-level identifiers (`course-index/`, `summary.md`, `patterns.md`, `coverage.md`, `P1..P<N>`, `/hwmap`, `/pattern`, `/blind`, `§<weak-§>`, `<hw-id>`) stay verbatim either way:
+
 ```
-course-index/ 생성 완료.
+course-index/ generated.
 
 - summary.md:  <X> sections, <Y> subsections
 - patterns.md: <N> recurring patterns (P1..P<N>), <M> one-off techniques
@@ -66,12 +72,12 @@ Top 3 blind spots:
   2. <§Y> — <title>  [recommend: /quiz <§Y>]
   3. <§Z> — <title>  [recommend: /derive <key-concept>]
 
-다음 단계:
-  /hwmap blind        — 전체 blind spot 확인
-  /pattern §<weak-§>  — 약점 영역 패턴 카드 리뷰
-  /blind <hw-id>      — 약점과 가장 가까운 HW 드릴
+Next steps:
+  /hwmap blind        — review all blind spots
+  /pattern §<weak-§>  — pattern cards for the weak section
+  /blind <hw-id>      — drill the HW closest to the weakness
 ```
 
 ## Idempotence
 
-If `course-index/*.md` already exists, warn: "기존 인덱스를 덮어쓸게. 수동 편집한 내용 있으면 백업." Wait for confirmation unless `--force` in arguments.
+If `course-index/*.md` already exists, warn (in $INTERFACE_LANG): "I'll overwrite the existing index. Back up any hand-edited content first." Wait for confirmation unless `--force` in arguments.

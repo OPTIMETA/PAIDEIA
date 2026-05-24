@@ -3,6 +3,10 @@ description: Convert all course-material PDFs (lectures, textbook, homework, sol
 argument-hint: [--force to reconvert everything]
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, table column headers (`Category`, `Converted`, `Skipped (already done)`, `Failed`), and provenance comments.
+
 Load `skills/pdf/SKILL.md`, `skills/pdf/VISION.md`, and `skills/course-builder/SKILL.md`.
 
 Arguments: $ARGUMENTS
@@ -137,8 +141,8 @@ After ingest completes, print:
 | homework | ... | ... | ... |
 | solutions | ... | ... | ... |
 
-End with:
-"다음 단계: `/paideia:analyze`로 patterns.md, coverage.md, summary.md를 생성하세요."
+End with (in $INTERFACE_LANG):
+"Next: run `/paideia:analyze` to generate patterns.md, coverage.md, summary.md."
 
 If any file failed (encryption, corrupted PDF, agent timeout), list at the end with the specific failure reason and suggested workaround:
 - Password-protected PDF → `qpdf --password=... --decrypt in.pdf out.pdf` first

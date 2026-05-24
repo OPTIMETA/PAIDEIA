@@ -3,6 +3,10 @@ description: Show solution pattern cards from course-index/patterns.md, filtered
 argument-hint: <§ number, keyword, Pk id, or "all">
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs (P1, P2…), and the pattern-card field labels (`Recognition:`, `Move:`, `Seen in:`, `Topic:`).
+
 Read `course-index/patterns.md`. If missing, tell the user to run `/analyze` first.
 
 Query: $ARGUMENTS
@@ -25,7 +29,7 @@ Procedure:
    Topic: <§ numbers>
    ```
 
-3. **End with a prompt:**
-   "처음 보면 바로 알아채기 어려울 것 같은 pattern 있어? 번호 말해 — 그것만 `/blind <problem>`으로 드릴."
+3. **End with a prompt** (in $INTERFACE_LANG):
+   "Any pattern here that would be hard to recognize at first sight? Tell me its number — we'll drill just that one with `/blind <problem>`."
 
 Keep total output under 40 lines. This is a recognition tool, not a tutorial. If the user wants depth on one pattern, they'll ask.

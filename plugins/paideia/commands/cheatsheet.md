@@ -3,6 +3,10 @@ description: Generate a one-page exam cheatsheet from course-index and errors/lo
 argument-hint: "[--pdf to also produce a printable PDF via pdf skill]"
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output, clarification questions, and narrative sections of any MD file you write (including the cheatsheet's prose) — must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs (P1, P2…), YAML keys, LaTeX, code, and the literal section anchors downstream tools regex on.
+
 Load `skills/exam-drill/SKILL.md`. Read `course-index/patterns.md`, `course-index/coverage.md`, `course-index/summary.md`, and `errors/log.md`.
 
 Arguments: $ARGUMENTS
@@ -48,10 +52,10 @@ Procedure:
    - Remember: NO Unicode subscripts/superscripts in reportlab — use `<sub>`/`<super>` XML tags
    - Use `pypandoc` if available as alternative: `pypandoc.convert_file('final.md', 'pdf', outputfile='final.pdf')`
 
-5. **Print to chat:**
+5. **Print to chat** (in $INTERFACE_LANG):
    - Filename of the cheatsheet
    - Word count / rough page estimate
-   - Closing: "시험장에 가져갈 수 있는 자료는 강의 규정 확인. 반입 불가면 최소한 이걸 마지막으로 스캔해서 외워."
+   - Closing: "Check what materials your exam allows. If none, at least scan this one more time and commit it to memory."
 
 ## Density tips
 

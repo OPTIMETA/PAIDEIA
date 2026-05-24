@@ -29,7 +29,7 @@ If `/grade` was called with an argument, use it as a hint. Otherwise find the mo
 
 ### Step 2: Convert PDF to MD (if PDF)
 
-**Use the `vision-ocr` skill** — delegates to a local VLM (Qwen3-VL 8B via ollama) for clean Korean+LaTeX transcription, with pytesseract as automatic fallback.
+**Use the `vision-ocr` skill** — delegates to a local VLM (Qwen3-VL 8B via ollama) for clean prose + LaTeX transcription (the script reads `INTERFACE_LANG` from `.course-meta` so the VLM keeps the handwriting in its original language), with pytesseract as automatic fallback.
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/vision_ocr.py" answers/<name>.pdf answers/converted/<name>.md
@@ -115,16 +115,16 @@ Keep this under 15 lines of output.
 ## Handling edge cases
 
 ### Empty or unreadable PDF
-If OCR yields <100 chars total, ask the user:
-"OCR 결과가 너무 부족해. PDF 화질이 낮거나 필기가 너무 작을 수도. 옵션:
-(a) 더 밝게/크게 스캔해서 다시 업로드
-(b) 직접 답을 `.md`로 타이핑해서 `answers/converted/<name>.md`에 저장 후 다시 `/grade`"
+If OCR yields <100 chars total, ask the user (in `INTERFACE_LANG` from `.course-meta`, default `en`):
+"OCR returned too little. PDF quality may be low or the handwriting too small. Options:
+(a) re-scan brighter/larger and re-upload
+(b) type the answer into `.md` and save it to `answers/converted/<name>.md`, then `/grade` again"
 
 ### User uploads .md directly
 Skip PDF conversion. Read `answers/<name>.md` directly. Everything else is the same.
 
 ### Multi-page with disordered content
-Hand-written work often has margin notes, arrows, struck-through attempts. OCR will render them chaotically. Note in the grade: "답안 순서가 애매. 내가 이해한 해석: <brief>. 다르면 알려줘."
+Hand-written work often has margin notes, arrows, struck-through attempts. OCR will render them chaotically. Note in the grade (in $INTERFACE_LANG): "Answer ordering ambiguous. My interpretation: <brief>. Let me know if different."
 
 ### User already in context
 If the user pastes their work directly into chat (not as PDF), grade it from context. Still apply strategy-based grading.

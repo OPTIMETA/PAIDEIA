@@ -3,6 +3,10 @@ description: Generate a twin variant of a known HW/example problem. Same techniq
 argument-hint: <problem-id, e.g. "hw4-p3" or "example-5.2">
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs, LaTeX, and YAML keys.
+
 Load `skills/exam-drill/SKILL.md` and `skills/exam-drill/twin-recipe.md`. Read `course-index/patterns.md`.
 
 Target: $ARGUMENTS
@@ -19,9 +23,9 @@ Procedure:
    - Problem → `twins/<id>_<ts>.md`
    - Solution → `twins/<id>_<ts>_sol.md` (hidden)
 
-5. **Print to chat:**
+5. **Print to chat** (in $INTERFACE_LANG):
    - The twin problem statement (do NOT reference the original problem ID in the output)
-   - Instruction: "종이로 풀고 `answers/twin_<id>_<ts>.pdf`에 올린 뒤 `/grade`. 또는 전략만 3~5줄로 말해도 됨."
+   - Instruction: "Solve on paper, upload as `answers/twin_<id>_<ts>.pdf`, then `/grade`. Or just describe the strategy in 3–5 lines."
 
 6. **If user responds with strategy text** (not PDF):
    - Match 3 axes: pattern / variable-choice / end-form

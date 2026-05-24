@@ -1,5 +1,5 @@
 ---
-description: Bootstrap a fresh course folder — create directory skeleton, check deps (Python, tesseract; optionally ollama), prompt for course metadata + OCR engine, and write CLAUDE.md + .course-meta. Run once per course in the course folder's CWD.
+description: Bootstrap a fresh course folder — create directory skeleton, check deps (Python, tesseract; optionally ollama), prompt for interface language (en/ko) + course metadata + OCR engine, and write CLAUDE.md + .course-meta. Run once per course in the course folder's CWD.
 argument-hint: (no args; fully interactive)
 ---
 
@@ -8,6 +8,26 @@ You are bootstrapping the user's current working directory into a fresh paideia 
 ## Execution plan
 
 Run these steps sequentially. Use the Bash tool. Keep chat output compact — the user is watching progress.
+
+### Step 0 — Interface language (ask the user, always in English)
+
+This prompt is **always shown in English** because we do not yet know the user's preference. After Step 0, all subsequent prompts and output in this command — and all future paideia commands and generated MD narrative — must follow the chosen language.
+
+Print exactly:
+
+```
+Choose interface language for this course (paideia will use it for all
+future prompts, drill instructions, and generated MD narrative):
+
+  1) en — English          (default)
+  2) ko — 한국어
+
+  Press Enter without input: en
+```
+
+Wait for the answer. Normalize `1`/`english`/`en`/empty → `en`; `2`/`korean`/`ko`/`한국어` → `ko`. Remember as `INTERFACE_LANG`. It goes into `.course-meta` in Step 6.
+
+**From this point on, every user-facing string in this command — prompts, confirmations, the final next-steps block — must be written in $INTERFACE_LANG.** Steps 3, 5, and 11 provide both `en` and `ko` literal blocks; pick the matching one.
 
 ### Step 1 — Python deps
 
@@ -33,9 +53,23 @@ tesseract --list-langs 2>&1 | grep -q '^kor$' && echo "tesseract-kor: ok" || ech
 - macOS: `brew install poppler tesseract tesseract-lang`
 - Ubuntu: `sudo apt-get install poppler-utils tesseract-ocr tesseract-ocr-kor`
 
-### Step 3 — OCR engine choice (ask the user)
+### Step 3 — OCR engine choice (ask the user, in $INTERFACE_LANG)
 
-Ask the user in Korean which OCR engine they want as the default for `/paideia:grade`:
+Ask the user which OCR engine they want as the default for `/paideia:grade`. Use the block matching `INTERFACE_LANG`:
+
+**If `INTERFACE_LANG=en`:**
+
+```
+Pick an OCR engine (override later with `/paideia:grade --ocr=<engine>`):
+
+  1) claude    — Claude native vision (default, no extra install, highest handwriting accuracy)
+  2) ollama    — local Qwen3-VL 8B (nothing leaves the machine, ~6GB initial download)
+  3) tesseract — pytesseract only (lightest and fastest, lowest handwriting accuracy)
+
+  Press Enter without input: claude
+```
+
+**If `INTERFACE_LANG=ko`:**
 
 ```
 OCR 엔진을 선택해 주세요 (나중에 `/paideia:grade --ocr=<engine>`로 덮어쓸 수 있습니다):
@@ -74,7 +108,10 @@ if ! ollama list 2>/dev/null | awk '{print $1}' | grep -qx "qwen3-vl:8b"; then
 fi
 ```
 
-Remember the PID and LOG path. Report: "ollama 모델 백그라운드 pull 시작 (PID, ~6 GB, 메타데이터 입력과 병렬 진행)."
+Remember the PID and LOG path. Report (in $INTERFACE_LANG):
+
+- `en`: "ollama model background pull started (PID, ~6 GB, runs in parallel with the metadata prompts)."
+- `ko`: "ollama 모델 백그라운드 pull 시작 (PID, ~6 GB, 메타데이터 입력과 병렬 진행)."
 
 ### Step 4 — Directory skeleton
 
@@ -100,13 +137,21 @@ mkdir -p materials/{lectures,textbook,homework,solutions} \
 EOF
 ```
 
-### Step 5 — Course metadata (ask the user)
+### Step 5 — Course metadata (ask the user, in $INTERFACE_LANG)
 
-Ask four short questions, in Korean:
-1. `COURSE_NAME` (예: Complex Analysis MATH 405)
+Ask four short questions. Use the phrasing matching `INTERFACE_LANG`:
+
+**If `INTERFACE_LANG=en`:**
+1. `COURSE_NAME` (e.g., Complex Analysis MATH 405)
 2. `EXAM_DATE` (YYYY-MM-DD)
 3. `EXAM_TYPE` (midterm/final/qualifier)
 4. `USER_WEAK_ZONES` (comma-separated topics, or `unknown`)
+
+**If `INTERFACE_LANG=ko`:**
+1. `COURSE_NAME` (예: Complex Analysis MATH 405)
+2. `EXAM_DATE` (YYYY-MM-DD)
+3. `EXAM_TYPE` (midterm/final/qualifier)
+4. `USER_WEAK_ZONES` (쉼표로 구분된 토픽, 또는 `unknown`)
 
 Wait for responses before continuing.
 
@@ -119,14 +164,17 @@ EXAM_DATE: <answer2>
 EXAM_TYPE: <answer3>
 USER_WEAK_ZONES: <answer4>
 OCR_ENGINE: <engine-from-step-3>
+INTERFACE_LANG: <lang-from-step-0>
 EOF
 ```
+
+`INTERFACE_LANG` is read by `session_start.py`, `statusline.py`, `vision_ocr.py`, and every paideia slash command to decide which language to use for all user-facing prose.
 
 ### Step 7 — CLAUDE.md (project-level rules)
 
 If `CLAUDE.md` doesn't exist in CWD, write the paideia template (see `CLAUDE.md.template` below). If it exists, **do not overwrite** — ask the user if they want to append the paideia section instead.
 
-Substitute the 4 metadata values + `OCR_ENGINE` into the template's metadata block before writing.
+Substitute all 6 placeholders (`$COURSE_NAME`, `$EXAM_DATE`, `$EXAM_TYPE`, `$WEAK_ZONES`, `$OCR_ENGINE`, `$INTERFACE_LANG`) into the template's metadata block before writing. The list must stay in sync with the metadata block in the `CLAUDE.md.template` section below.
 
 ### Step 8 — Statusline + SessionStart wiring
 
@@ -234,8 +282,30 @@ Report pull status (success or point to `$LOG`).
 
 Format the block below exactly as shown — the first paragraph is the **mandatory restart notice**. `statusLine` in `.claude/settings.json` is only read at Claude Code startup; `/plugin reload` and new turns will NOT pick it up. If Step 8 actually wrote a new `settings.json` (i.e., one did not already exist), the restart is **required** for the statusline to appear. If Step 8 skipped writing (file already existed), restart is optional.
 
+Print the block matching `INTERFACE_LANG`:
+
+**If `INTERFACE_LANG=en`:**
+
 ```
-✅ <COURSE_NAME> 준비 완료. (OCR: <OCR_ENGINE>)
+✅ <COURSE_NAME> ready. (OCR: <OCR_ENGINE>, lang: en)
+
+⚠️  Fully **quit and relaunch** Claude Code to enable the statusline.
+    (statusLine settings are read only at app startup — /plugin reload
+    will NOT pick them up.) After relaunch, opening Claude Code in this
+    folder will show a neon line at the top:
+    "paideia · <COURSE_NAME> · D-N · setup · …"
+
+Next steps (after relaunch):
+  1. Drop PDFs/MDs into materials/{lectures,textbook,homework,solutions}/
+  2. /paideia:ingest        ← PDFs → MDs
+  3. /paideia:analyze       ← build patterns, coverage
+  4. /paideia:hwmap hot     ← see 🔥🔥 exam hotzones
+```
+
+**If `INTERFACE_LANG=ko`:**
+
+```
+✅ <COURSE_NAME> 준비 완료. (OCR: <OCR_ENGINE>, lang: ko)
 
 ⚠️  statusline 적용을 위해 Claude Code를 **완전히 종료 후 재시작**해 주세요.
     (statusLine 설정은 앱 시작 시에만 읽힙니다 — /plugin reload 로는 반영 안 됩니다.)
@@ -251,7 +321,7 @@ Format the block below exactly as shown — the first paragraph is the **mandato
 
 ## CLAUDE.md.template
 
-Below is the template to write at Step 7. Substitute `$COURSE_NAME`, `$EXAM_DATE`, `$EXAM_TYPE`, `$WEAK_ZONES`, `$OCR_ENGINE` verbatim. (Step 8 wires the statusline; Step 9 handles git.)
+Below is the template to write at Step 7. Substitute `$COURSE_NAME`, `$EXAM_DATE`, `$EXAM_TYPE`, `$WEAK_ZONES`, `$OCR_ENGINE`, `$INTERFACE_LANG` verbatim. (Step 8 wires the statusline; Step 9 handles git.)
 
 ```markdown
 # Course Cram — Project Context
@@ -270,6 +340,7 @@ EXAM_DATE: $EXAM_DATE
 EXAM_TYPE: $EXAM_TYPE
 USER_WEAK_ZONES: $WEAK_ZONES
 OCR_ENGINE: $OCR_ENGINE
+INTERFACE_LANG: $INTERFACE_LANG
 ```
 
 ## Directory map
@@ -293,7 +364,7 @@ All commands are namespaced `/paideia:<name>`. See the plugin's README for the f
 - Citations: every explanation cites `converted/<file>.md` §.
 - Pattern IDs: reference by `Pk` from `course-index/patterns.md`.
 - Never reveal solutions before the user attempts.
-- Korean prose, LaTeX math (`$...$` inline, `$$...$$` display).
+- Prose in `$INTERFACE_LANG` (en or ko), LaTeX math (`$...$` inline, `$$...$$` display). File paths, slash command names, pattern IDs (P1, P2…), YAML keys, and section anchors regex'd by other tools (e.g. `## One-line verdict`, `## Page N`) always stay in English regardless of language.
 - Errors logged in `errors/log.md` on every failed attempt (YAML schema).
 - Keep drill output ≤ 40 lines, grade reports ≤ 15 lines.
 ```

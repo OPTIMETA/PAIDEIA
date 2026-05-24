@@ -13,7 +13,7 @@ description: Use when the user wants exam-focused drilling from the course's ana
 
 2. **Answer side (user → PDF).** The user solves on paper, scans as PDF, uploads to `answers/<name>.pdf`. The `answer-processing` skill (auto-loaded by `/grade`) converts the PDF to markdown and grades.
 
-3. **Strategy checks (when user is online)** — when a command asks the user to verify understanding without producing a full written solution, it asks only for the *strategy* in Korean prose (3–5 lines): which pattern(s), which variables are fixed/expanded, what form the answer takes. Strategy matching is stronger evidence of mastery than line-by-line algebra.
+3. **Strategy checks (when user is online)** — when a command asks the user to verify understanding without producing a full written solution, it asks only for the *strategy* in 3–5 lines of prose (written in `INTERFACE_LANG` from `.course-meta`, default `en`): which pattern(s), which variables are fixed/expanded, what form the answer takes. Strategy matching is stronger evidence of mastery than line-by-line algebra.
 
 ## Drill targeting philosophy (critical — do not break)
 
@@ -59,7 +59,7 @@ This skill assumes `/ingest` and `/analyze` have been run. If `course-index/patt
 ### `/blind <problem-id>`
 
 1. Present the problem verbatim from `converted/homework/`.
-2. Ask for strategy (3–5 lines, Korean):
+2. Ask for strategy (3–5 lines, in $INTERFACE_LANG):
    - which pattern(s) from `course-index/patterns.md`
    - what variables are fixed vs. varied
    - expected form of the final answer
@@ -122,9 +122,10 @@ When any drill reveals an error, append to `errors/log.md`:
 - Any PDF read/write → loads `pdf` skill.
 - All drill outputs (twins/, chain/, quizzes/) use plain markdown — no PDF creation inside drill commands. The user uploads answer PDFs; Claude doesn't make PDFs during drilling.
 
-## Korean conventions
+## Prose conventions
 
-- Explanations in Korean.
+- Explanations in `INTERFACE_LANG` (en or ko) from `.course-meta`. Default `en` if the field is absent.
 - Math in LaTeX (`$...$` inline, `$$...$$` display).
-- Pattern IDs stay Latin (P1, P2, ...).
-- Section IDs follow the course's convention from `course-index/summary.md` (§, Ch., Ch 3.1, etc.).
+- Pattern IDs stay Latin (P1, P2, ...) regardless of language.
+- Section IDs follow the course's convention from `course-index/summary.md` (§, Ch., Ch 3.1, etc.) regardless of language.
+- File paths, slash command names, YAML keys, and section anchors downstream tools regex on (`## One-line verdict`, `## Page N`, `# Vision-OCR transcription`) stay in English regardless of language.

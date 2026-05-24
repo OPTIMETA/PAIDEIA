@@ -3,6 +3,10 @@ description: Generate an exam-style integration problem chaining N patterns from
 argument-hint: <N patterns to chain, default 2>
 ---
 
+## Output language
+
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs, LaTeX, and YAML keys (`pattern:`, `error_type:`, `chain_problem`, etc.).
+
 Load `skills/exam-drill/SKILL.md`. Read `course-index/patterns.md`, `course-index/coverage.md`.
 
 N (pattern count): $ARGUMENTS (default 2, max 4)
@@ -29,7 +33,7 @@ Procedure:
    - Full problem
    - Estimated time (N × 6 min + 5 min setup)
    - Do NOT reveal which patterns are used
-   - Closing: "종이로 풀고 `answers/chain_<ts>.pdf`에 올린 뒤 `/grade`. 풀이 끝에 '어느 pattern 썼는지'도 답에 적어줘 — 인식 드릴의 핵심."
+   - Closing (in $INTERFACE_LANG): "Solve on paper, upload as `answers/chain_<ts>.pdf`, then `/grade`. At the end of your solution, also write down 'which pattern you used' — that's the core of the recognition drill."
 
 5. **When user submits:**
    - `/grade` converts PDF → MD → checks:
