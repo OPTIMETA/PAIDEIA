@@ -163,15 +163,26 @@ Open Claude Code inside the folder you want to use for this course, then run:
 ```
 
 This interactively:
-1. Checks Python / poppler / tesseract deps and offers to install missing ones (ollama is only probed when you pick the `ollama` engine in step 3)
-2. Asks for `COURSE_NAME`, `EXAM_DATE`, `EXAM_TYPE`, `USER_WEAK_ZONES`
-3. Asks which OCR engine you want as the default: `claude` (native vision, no install), `ollama` (local Qwen3-VL, pulls the 6 GB model in the background), or `tesseract` (lightest, lowest fidelity)
-4. Creates the directory skeleton (`materials/`, `converted/`, `course-index/`, `quizzes/`, `mock/`, `twins/`, `chain/`, `derivations/`, `cheatsheet/`, `weakmap/`, `answers/converted/`, `errors/`)
-5. Writes `.course-meta` (carries `OCR_ENGINE`, read by `/paideia:grade`) and a project-level `CLAUDE.md`
-6. Wires both a project-scoped statusline (`scripts/statusline.py`) **and** a `SessionStart` hook (`scripts/session_start.py`) in `.claude/settings.json`. The statusline shows `paideia · <COURSE> · D-N · <phase> · P<k> ↑` whenever you're inside the course folder; the hook prints a matching two-line reminder at the top of every new conversation so first-turn context is already primed
-7. `git init` so your prep is versioned from the first keystroke
+1. Checks Python / poppler / tesseract deps and offers to install missing ones (ollama is only probed when you pick the `ollama` engine in step 4)
+2. Asks which interface language you want for this course — `en` (default) or `ko`. All subsequent paideia prompts, drill instructions, and generated MD narrative in this folder will follow that choice. Structural tokens (file paths, slash command names, pattern IDs `P1, P2, …`, YAML keys, tier markers) stay in English regardless
+3. Asks for `COURSE_NAME`, `EXAM_DATE`, `EXAM_TYPE`, `USER_WEAK_ZONES`
+4. Asks which OCR engine you want as the default: `claude` (native vision, no install), `ollama` (local Qwen3-VL, pulls the 6 GB model in the background), or `tesseract` (lightest, lowest fidelity)
+5. Creates the directory skeleton (`materials/`, `converted/`, `course-index/`, `quizzes/`, `mock/`, `twins/`, `chain/`, `derivations/`, `cheatsheet/`, `weakmap/`, `answers/converted/`, `errors/`)
+6. Writes `.course-meta` (carries `INTERFACE_LANG` + `OCR_ENGINE`, read by `/paideia:grade`, `session_start.py`, `vision_ocr.py`, and every slash command) and a project-level `CLAUDE.md`
+7. Wires both a project-scoped statusline (`scripts/statusline.py`) **and** a `SessionStart` hook (`scripts/session_start.py`) in `.claude/settings.json`. The statusline shows `paideia · <COURSE> · D-N · <phase> · P<k> ↑` whenever you're inside the course folder; the hook prints a matching two-line reminder at the top of every new conversation so first-turn context is already primed
+8. `git init` so your prep is versioned from the first keystroke
 
 You can always override the OCR engine for a single grade call: `/paideia:grade --ocr=claude path/to/answer.pdf`.
+
+### Existing course folders (migration note)
+
+If you initialized a course before language support existed, `.course-meta` won't have an `INTERFACE_LANG` field — the plugin treats that as `en` and switches all prompts/output to English. **To keep Korean output for an existing course, add a single line to `.course-meta`:**
+
+```
+INTERFACE_LANG: ko
+```
+
+That's the whole migration. No re-init needed. Fresh courses go through the language picker in step 2 of `/paideia:init-course`.
 
 ---
 
@@ -181,7 +192,7 @@ After `/paideia:init-course`, your course folder looks like this:
 
 ```
 my-course/
-├── .course-meta                     # course name, exam date, OCR engine
+├── .course-meta                     # course name, exam date, interface language (en|ko), OCR engine
 ├── CLAUDE.md                        # project rules Claude Code reads every turn
 ├── .gitignore                       # hides raw PDF scans + OCR scratch; the study graph itself (errors/log.md, answer keys, solutions) stays committed
 ├── .claude/
@@ -344,7 +355,7 @@ The user does not type math into chat. They solve on paper, scan to PDF, drop th
 |---|---|---|---|
 | `claude` | **Yes** | `pdftoppm` renders each page → Claude reads each PNG directly → synthesizes markdown in one pass. No extra model, no subprocess, nothing to install. | The out-of-the-box path. Strong on Korean + LaTeX; no model-load stall. |
 | `ollama` | opt-in | `vision_ocr.py --engine=ollama` → local Qwen3-VL 8B with automatic tesseract fallback. | You want the page images to never leave the machine (not even to Anthropic). Requires `ollama pull qwen3-vl:8b` once (~6 GB). |
-| `tesseract` | opt-in | `vision_ocr.py --engine=tesseract` → pytesseract `eng+kor` only. | Fastest and lightest; acceptable for typed scans; poor on hand-writing. |
+| `tesseract` | opt-in | `vision_ocr.py --engine=tesseract` → pytesseract (`eng` if `INTERFACE_LANG=en`, `eng+kor` if `ko`). | Fastest and lightest; acceptable for typed scans; poor on hand-writing. |
 
 Each engine writes `answers/converted/<stem>.md` with a `<!-- SOURCE: ... -->` / `<!-- TIER: ... -->` header comment so `/paideia:grade` can caveat low-confidence OCR.
 
@@ -459,7 +470,7 @@ Yes. That's the whole point of keeping them as plain markdown. If `P3` feels wro
 No. The default OCR engine is Claude's native vision — it uses the Claude Code session you're already in and needs no extra install. Ollama + `qwen3-vl:8b` is an opt-in path for users who want the page images to stay on their machine entirely (not even visible to Anthropic's servers during a grade call). `tesseract` is a third option for minimal-install setups or typed scans.
 
 **What if my machine can't run `qwen3-vl:8b` even though I picked Ollama?**
-The `vision_ocr.py` driver automatically falls back to tesseract `eng+kor` on any Ollama failure. You can also just set `OCR_ENGINE: claude` in `.course-meta` (or pass `--ocr=claude`) and skip Ollama entirely.
+The `vision_ocr.py` driver automatically falls back to tesseract on any Ollama failure (`eng` if your course's `INTERFACE_LANG` is `en`, `eng+kor` if `ko`). You can also just set `OCR_ENGINE: claude` in `.course-meta` (or pass `--ocr=claude`) and skip Ollama entirely.
 
 **Can I reuse the plugin across multiple courses?**
 Yes — each course lives in its own folder with its own `.course-meta`, `course-index/`, `errors/log.md`, and `weakmap/`. Nothing is shared or polluted across courses. Open Claude Code inside whichever course folder you're working on.

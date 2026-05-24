@@ -161,15 +161,26 @@ Claude Code 안에서 **각 줄을 한 번에 하나씩** 실행해 주세요.
 ```
 
 이 명령은 대화식으로 다음을 수행합니다.
-1. Python / poppler / tesseract 의존성을 확인하고, 누락된 항목은 설치를 제안합니다 (ollama는 아래 3단계에서 `ollama` 엔진을 선택하신 경우에만 점검합니다)
-2. `COURSE_NAME`, `EXAM_DATE`, `EXAM_TYPE`, `USER_WEAK_ZONES` 값을 입력받습니다
-3. 기본 OCR 엔진을 고릅니다 — `claude` (네이티브 비전, 추가 설치 없음) / `ollama` (로컬 Qwen3-VL, 약 6 GB 모델을 백그라운드에서 받음) / `tesseract` (가장 가볍고 빠름, 필기 정확도는 낮음)
-4. 디렉토리 골격을 생성합니다 (`materials/`, `converted/`, `course-index/`, `quizzes/`, `mock/`, `twins/`, `chain/`, `derivations/`, `cheatsheet/`, `weakmap/`, `answers/converted/`, `errors/`)
-5. `.course-meta`(`OCR_ENGINE`을 담고 있으며 `/paideia:grade`가 이 값을 읽습니다)와 프로젝트 수준 `CLAUDE.md`를 작성합니다
-6. 이 폴더 전용 statusline을 걸어 둡니다 (`.claude/settings.json` → `scripts/statusline.py`). 이 폴더에 들어와 있을 때만 Claude Code의 statusline 슬롯에 `paideia · <COURSE> · D-N · <phase> · P<k> ↑`가 뜹니다
-7. `git init`을 수행해 첫 키 입력부터 준비 과정이 버전 관리되도록 합니다
+1. Python / poppler / tesseract 의존성을 확인하고, 누락된 항목은 설치를 제안합니다 (ollama는 아래 4단계에서 `ollama` 엔진을 선택하신 경우에만 점검합니다)
+2. 이 코스에서 사용할 인터페이스 언어(`en` 기본값 또는 `ko`)를 묻습니다. 이후 이 폴더의 모든 paideia 프롬프트, 드릴 안내, 생성되는 MD 본문은 선택하신 언어로 출력됩니다. 구조적 토큰(파일 경로, 슬래시 커맨드명, 패턴 ID `P1, P2, …`, YAML 키, tier 마커)은 언어와 무관하게 항상 영어로 유지됩니다
+3. `COURSE_NAME`, `EXAM_DATE`, `EXAM_TYPE`, `USER_WEAK_ZONES` 값을 입력받습니다
+4. 기본 OCR 엔진을 고릅니다 — `claude` (네이티브 비전, 추가 설치 없음) / `ollama` (로컬 Qwen3-VL, 약 6 GB 모델을 백그라운드에서 받음) / `tesseract` (가장 가볍고 빠름, 필기 정확도는 낮음)
+5. 디렉토리 골격을 생성합니다 (`materials/`, `converted/`, `course-index/`, `quizzes/`, `mock/`, `twins/`, `chain/`, `derivations/`, `cheatsheet/`, `weakmap/`, `answers/converted/`, `errors/`)
+6. `.course-meta`(`INTERFACE_LANG` + `OCR_ENGINE`을 담고 있으며 `/paideia:grade`, `session_start.py`, `vision_ocr.py`, 모든 슬래시 커맨드가 읽습니다)와 프로젝트 수준 `CLAUDE.md`를 작성합니다
+7. 이 폴더 전용 statusline을 걸어 둡니다 (`.claude/settings.json` → `scripts/statusline.py`). 이 폴더에 들어와 있을 때만 Claude Code의 statusline 슬롯에 `paideia · <COURSE> · D-N · <phase> · P<k> ↑`가 뜹니다
+8. `git init`을 수행해 첫 키 입력부터 준비 과정이 버전 관리되도록 합니다
 
 개별 채점 호출에서는 엔진을 그때그때 덮어쓰실 수 있습니다. 예: `/paideia:grade --ocr=claude path/to/answer.pdf`.
+
+### 기존 코스 폴더 (마이그레이션 노트)
+
+언어 지원이 추가되기 전에 초기화한 코스라면 `.course-meta`에 `INTERFACE_LANG` 필드가 없습니다 — 플러그인은 이 경우를 `en`으로 처리하여 모든 프롬프트와 출력을 영어로 전환합니다. **기존 코스를 계속 한국어로 쓰고 싶으시면 `.course-meta`에 한 줄만 추가해 주세요:**
+
+```
+INTERFACE_LANG: ko
+```
+
+이게 마이그레이션의 전부입니다. 재초기화는 필요 없습니다. 신규 코스는 `/paideia:init-course` 2단계의 언어 선택을 통해 자동으로 설정됩니다.
 
 ---
 
@@ -179,7 +190,7 @@ Claude Code 안에서 **각 줄을 한 번에 하나씩** 실행해 주세요.
 
 ```
 my-course/
-├── .course-meta                     # 코스명, 시험일, OCR 엔진 설정
+├── .course-meta                     # 코스명, 시험일, 인터페이스 언어(en|ko), OCR 엔진 설정
 ├── CLAUDE.md                        # Claude Code가 매 턴 읽는 프로젝트 규칙
 ├── .gitignore                       # 답안 PDF, 정답 키, OCR 임시물 제외
 ├── .claude/
@@ -342,7 +353,7 @@ Claude Code에서:
 |---|---|---|---|
 | `claude` | **예** | `pdftoppm`으로 페이지별 PNG 렌더링 → Claude가 각 PNG를 직접 읽어 한 번에 마크다운으로 합성. 별도 모델도, 서브프로세스도, 설치도 필요하지 않습니다. | 가장 마찰이 적은 기본 경로. 한국어·LaTeX 모두 강하고 모델 로딩 지연도 없습니다. |
 | `ollama` | 선택 | `vision_ocr.py --engine=ollama` — 로컬 Qwen3-VL 8B, 실패 시 자동으로 tesseract로 폴백합니다. | 페이지 이미지조차 Anthropic 서버에 보내고 싶지 않으실 때. 최초 `ollama pull qwen3-vl:8b` (~6 GB)가 필요합니다. |
-| `tesseract` | 선택 | `vision_ocr.py --engine=tesseract` — pytesseract `eng+kor`만 사용합니다. | 가장 빠르고 가볍습니다. 타이핑된 스캔엔 괜찮고, 필기엔 정확도가 낮습니다. |
+| `tesseract` | 선택 | `vision_ocr.py --engine=tesseract` — pytesseract (`INTERFACE_LANG=en`이면 `eng`, `ko`면 `eng+kor`)를 사용합니다. | 가장 빠르고 가볍습니다. 타이핑된 스캔엔 괜찮고, 필기엔 정확도가 낮습니다. |
 
 세 엔진 모두 `answers/converted/<stem>.md`에 `<!-- SOURCE: ... -->` / `<!-- TIER: ... -->` 헤더 코멘트를 남기므로, `/paideia:grade`가 OCR 신뢰도가 낮을 때 그에 맞게 태도를 바꿀 수 있습니다.
 
@@ -452,7 +463,7 @@ PAIDEIA/
 아니요. 기본 OCR 엔진은 Claude 자체의 비전 기능입니다 — 이미 사용 중이신 Claude Code 세션 안에서 동작하고, 추가로 설치할 것이 없습니다. Ollama + `qwen3-vl:8b`는 페이지 이미지까지 기기 안에 붙잡아 두고 싶으실 때(= Anthropic 서버에도 보내지 않고 싶으실 때)를 위한 선택 경로입니다. `tesseract`는 설치를 최소로 하고 싶거나 타이핑된 스캔만 다루실 때를 위한 세 번째 옵션입니다.
 
 **`qwen3-vl:8b`를 선택했는데 제 기기가 감당하지 못하면요?**
-`vision_ocr.py` 드라이버가 Ollama 실패 시 자동으로 tesseract `eng+kor`로 폴백합니다. 또는 `.course-meta`의 `OCR_ENGINE`을 `claude`로 바꾸시거나 `--ocr=claude`를 붙이시면 Ollama를 완전히 우회할 수 있습니다.
+`vision_ocr.py` 드라이버가 Ollama 실패 시 자동으로 tesseract로 폴백합니다 (코스의 `INTERFACE_LANG`이 `en`이면 `eng`, `ko`면 `eng+kor`). 또는 `.course-meta`의 `OCR_ENGINE`을 `claude`로 바꾸시거나 `--ocr=claude`를 붙이시면 Ollama를 완전히 우회할 수 있습니다.
 
 **여러 과목에서 재사용할 수 있나요?**
 네 — 각 과목은 자신만의 폴더 안에 자신의 `.course-meta`, `course-index/`, `errors/log.md`, `weakmap/`을 가집니다. 과목 간에 공유되거나 섞이는 것이 없습니다. 그때그때 작업하실 과목 폴더 안에서 Claude Code를 여시면 됩니다.
