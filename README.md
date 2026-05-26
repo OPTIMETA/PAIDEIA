@@ -24,6 +24,12 @@
 </p>
 
 <p align="center">
+  <a href="https://news.hada.io/topic?id=29865">
+    <img height="34" src="https://img.shields.io/badge/GeekNews-%231%20on%2026.05.26-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews #1 on 26.05.26">
+  </a>
+</p>
+
+<p align="center">
   <a href="./README.ko.md">한국어 README</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/TaewoooPark/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI edition</a>
