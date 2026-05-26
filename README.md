@@ -39,6 +39,8 @@
 
 > **Using OpenAI Codex CLI instead of Claude Code?** Same tool, same on-disk layout, same license — ported to Codex on 2026-04-21 amid brief confusion over a reported Claude Code Pro-tier restriction that Anthropic later clarified was only a limited test for some new users. The port stands on its own as a CLI-agnostic alternative either way; pick whichever agentic CLI you already pay for → **[PAIDEIA-codex](https://github.com/TaewoooPark/PAIDEIA-codex)**.
 
+> **Security notice.** This is the original PAIDEIA repository. PAIDEIA is installed as a Claude Code plugin and never asks you to download a `.zip`, run an `.exe`, or use any installer. Any other repository using the PAIDEIA name is not affiliated with this project unless it is explicitly linked from this README.
+
 ---
 
 <p align="center">

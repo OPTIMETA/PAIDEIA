@@ -37,6 +37,8 @@
 
 > **Claude Code 대신 OpenAI Codex CLI를 쓰시나요?** 같은 도구, 같은 디렉터리 구조, 같은 라이선스 — 2026-04-21에 Claude Code Pro 제한 보도로 잠깐 혼란이 돌던 시점에 Codex용 포팅이 진행됐습니다. Anthropic은 이후 "일부 신규 사용자 대상의 한정 테스트였을 뿐"이라고 정정했지만, 이 포트는 어느 쪽 CLI든 이미 결제 중인 환경에서 Paideia를 돌릴 수 있게 해 주는 CLI-중립 대안으로 그대로 쓸모가 있습니다 → **[PAIDEIA-codex](https://github.com/TaewoooPark/PAIDEIA-codex)**.
 
+> **보안 안내.** 이 저장소가 PAIDEIA의 원본 저장소입니다. PAIDEIA는 Claude Code 플러그인으로 설치되며, `.zip` 다운로드, `.exe` 실행, 별도 installer 설치를 요구하지 않습니다. 이 README에서 명시적으로 연결한 저장소가 아니라면, 같은 PAIDEIA 이름을 쓰는 다른 저장소는 이 프로젝트와 아무 관련이 없습니다.
+
 ---
 
 <p align="center">
