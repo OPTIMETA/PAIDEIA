@@ -47,7 +47,7 @@
 </p>
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/31b04379-f6f9-406f-858e-2fe5da0ef548" width="100%" autoplay loop muted playsinline></video>
+  <video src="https://github.com/user-attachments/assets/37cae4de-1337-48b9-b059-e48c2942ed51" width="100%" autoplay loop muted playsinline></video>
 </p>
 
 ---
