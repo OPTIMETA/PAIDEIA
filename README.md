@@ -41,11 +41,13 @@
 
 > **Security notice.** This is the original PAIDEIA repository. PAIDEIA is installed as a Claude Code plugin and never asks you to download a `.zip`, run an `.exe`, or use any installer. Any other repository using the PAIDEIA name is not affiliated with this project unless it is explicitly linked from this README.
 
----
-
 <p align="center">
   <em>Generic study tools teach you the average syllabus. Paideia teaches you <strong>your</strong> syllabus —<br>
   from your professor's notes, your HW emphases, your handwriting, your errors. Every artifact is a markdown file you can edit.</em>
+</p>
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/31b04379-f6f9-406f-858e-2fe5da0ef548" width="100%" autoplay loop muted playsinline></video>
 </p>
 
 ---
@@ -113,6 +115,10 @@ Paideia's ranking is explicit about this, and every drill command honors it by d
 ---
 
 ## The formation cycle, stage by stage
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/13aa92f6-386e-473c-a422-769b673a96ca" width="100%" autoplay loop muted playsinline></video>
+</p>
 
 | Stage | What it does | Commands | Produces |
 |-------|-------------|----------|----------|

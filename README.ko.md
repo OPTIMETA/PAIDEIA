@@ -39,11 +39,13 @@
 
 > **보안 안내.** 이 저장소가 PAIDEIA의 원본 저장소입니다. PAIDEIA는 Claude Code 플러그인으로 설치되며, `.zip` 다운로드, `.exe` 실행, 별도 installer 설치를 요구하지 않습니다. 이 README에서 명시적으로 연결한 저장소가 아니라면, 같은 PAIDEIA 이름을 쓰는 다른 저장소는 이 프로젝트와 아무 관련이 없습니다.
 
----
-
 <p align="center">
   <em>일반적인 학습 도구는 평균적인 실러버스를 가르칩니다. Paideia는 <strong>당신의</strong> 실러버스를 가르칩니다 —<br>
   당신의 교수님 강의노트, 당신의 숙제 경향, 당신의 필기, 당신의 오답에서 출발해서요. 모든 산출물은 당신이 직접 편집할 수 있는 마크다운 파일입니다.</em>
+</p>
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/31b04379-f6f9-406f-858e-2fe5da0ef548" width="100%" autoplay loop muted playsinline></video>
 </p>
 
 ---
@@ -111,6 +113,10 @@ Paideia의 우선순위는 이 원리를 명시적으로 반영합니다. 모든
 ---
 
 ## 형성 사이클, 단계별 해설
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/13aa92f6-386e-473c-a422-769b673a96ca" width="100%" autoplay loop muted playsinline></video>
+</p>
 
 | 단계 | 하는 일 | 명령 | 산출물 |
 |------|---------------|------|--------|
