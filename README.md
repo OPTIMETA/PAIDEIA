@@ -34,6 +34,12 @@
 </p>
 
 <p align="center">
+  <a href="https://www.taewoopark.com/projects/paideia">
+    <img height="34" src="https://img.shields.io/badge/Interactive%20Demo-Live-333333?style=for-the-badge&labelColor=000000&color=333333" alt="Interactive demo at taewoopark.com">
+  </a>
+</p>
+
+<p align="center">
   <a href="./README.ko.md">한국어 README</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/TaewoooPark/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI edition</a>
