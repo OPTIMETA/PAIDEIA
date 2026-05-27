@@ -27,6 +27,10 @@
   <a href="https://news.hada.io/topic?id=29865">
     <img height="34" src="https://img.shields.io/badge/GeekNews-%231%20on%2026.05.26-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews #1 on 26.05.26">
   </a>
+  &nbsp;
+  <a href="https://www.producthunt.com/products/paideia">
+    <img height="34" src="https://img.shields.io/badge/Product%20Hunt-Launched-333333?style=for-the-badge&logo=producthunt&logoColor=white&labelColor=000000&color=333333" alt="Product Hunt launch">
+  </a>
 </p>
 
 <p align="center">
@@ -45,7 +49,7 @@
 </p>
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/37cae4de-1337-48b9-b059-e48c2942ed51" width="100%" autoplay loop muted playsinline></video>
+  <img src="./docs/media/paideia-main.jpg" alt="PAIDEIA 터미널 미리보기" width="100%">
 </p>
 
 ---
