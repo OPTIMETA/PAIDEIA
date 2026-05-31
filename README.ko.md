@@ -126,7 +126,33 @@ Paideia의 우선순위는 이 원리를 명시적으로 반영합니다. 모든
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/13aa92f6-386e-473c-a422-769b673a96ca" width="100%" autoplay loop muted playsinline></video>
+  <br><sub><em>Claude Code CLI에서 실행한 모습.</em></sub>
 </p>
+
+<p align="center"><sub><em>그리고 Claude 데스크톱 앱에서 — 같은 플러그인이 analyze · hwmap 산출물을 나란히 렌더링합니다:</em></sub></p>
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/media/desktop-summary.png" alt="/paideia:analyze가 생성한 summary.md">
+      <br><sub><b><code>summary.md</code></b> — <code>/paideia:analyze</code>가 생성한 주제 트리</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/media/desktop-pattern.png" alt="/paideia:analyze가 생성한 patterns.md">
+      <br><sub><b><code>patterns.md</code></b> — <code>/paideia:analyze</code>가 추출한 풀이 패턴 카드</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/media/desktop-coverage.png" alt="/paideia:analyze가 생성한 coverage.md">
+      <br><sub><b><code>coverage.md</code></b> — <code>/paideia:analyze</code>가 만든 절 → 출제 확률 매핑</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/media/desktop-hwmap.png" alt="/paideia:hwmap 실행 결과">
+      <br><sub><b><code>/paideia:hwmap</code></b> — HW 밀도 기반 드릴 우선순위</sub>
+    </td>
+  </tr>
+</table>
 
 | 단계 | 하는 일 | 명령 | 산출물 |
 |------|---------------|------|--------|
