@@ -156,6 +156,10 @@ Paideia's ranking is explicit about this, and every drill command honors it by d
   </tr>
 </table>
 
+<p align="center">
+  <strong>Recommended:</strong> run Paideia from the <strong>Claude desktop app</strong> for the smoothest experience — markdown, LaTeX, and tables render inline as the agent produces them, so analyze and hwmap outputs are readable without leaving the conversation. If you prefer the CLI (the demo above), pair it with <strong>Obsidian</strong> pointed at your course folder; see <em>A reading tip: use Obsidian</em> below.
+</p>
+
 | Stage | What it does | Commands | Produces |
 |-------|-------------|----------|----------|
 | **Encounter** | Read the professor's signal | `/paideia:ingest` | `converted/**/*.md` — every lecture, textbook chapter, HW, solution, as clean markdown |
@@ -290,7 +294,7 @@ Everything else is produced by slash commands and should be treated as regenerab
 
 ## A reading tip: use Obsidian
 
-Paideia writes everything as plain markdown with LaTeX math (`$...$`, `$$...$$`). You can read it in any editor, but **[Obsidian](https://obsidian.md)** is the natural choice:
+If you run Paideia from the CLI rather than the Claude desktop app, this is the recommended companion. Paideia writes everything as plain markdown with LaTeX math (`$...$`, `$$...$$`); you can read it in any editor, but **[Obsidian](https://obsidian.md)** is the natural choice:
 
 - Renders `$...$` and `$$...$$` math via MathJax with zero configuration
 - Backlinks let you click from `quizzes/q_<ts>.md` straight into the cited `converted/lectures/chN.md §K`

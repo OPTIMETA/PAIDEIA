@@ -154,6 +154,10 @@ Paideia의 우선순위는 이 원리를 명시적으로 반영합니다. 모든
   </tr>
 </table>
 
+<p align="center">
+  <strong>권장 환경:</strong> Paideia는 <strong>Claude 데스크톱 앱</strong>에서 가장 매끄럽게 동작합니다 — 마크다운·LaTeX·표가 에이전트 출력 시점에 그대로 렌더링되어, analyze·hwmap 산출물을 대화창에서 곧바로 읽으실 수 있습니다. CLI(위 영상)를 선호하신다면, <strong>Obsidian</strong>을 코스 폴더에 걸어 함께 쓰시기를 권합니다. 아래 <em>읽기 팁: Obsidian을 쓰세요</em> 섹션을 참고해 주세요.
+</p>
+
 | 단계 | 하는 일 | 명령 | 산출물 |
 |------|---------------|------|--------|
 | **대면 (Encounter)** | 교수님이 보낸 신호를 읽습니다 | `/paideia:ingest` | `converted/**/*.md` — 모든 강의노트·교재 챕터·숙제·풀이를 깨끗한 마크다운으로 |
@@ -288,7 +292,7 @@ my-course/
 
 ## 읽기 팁: Obsidian을 쓰세요
 
-Paideia는 모든 것을 LaTeX 수식(`$...$`, `$$...$$`)이 포함된 평범한 마크다운으로 씁니다. 어떤 에디터로도 읽을 수 있지만, **[Obsidian](https://obsidian.md)**이 가장 자연스러운 선택입니다.
+Claude 데스크톱 앱이 아닌 CLI에서 Paideia를 운용하신다면 이 도구를 함께 쓰시기를 권합니다. Paideia는 모든 것을 LaTeX 수식(`$...$`, `$$...$$`)이 포함된 평범한 마크다운으로 씁니다. 어떤 에디터로도 읽으실 수 있지만, **[Obsidian](https://obsidian.md)**이 가장 자연스러운 선택입니다.
 
 - 별도 설정 없이 MathJax로 `$...$`, `$$...$$` 수식을 렌더링합니다
 - 백링크를 통해 `quizzes/q_<ts>.md`에서 인용된 `converted/lectures/chN.md §K`로 클릭 한 번에 이동할 수 있습니다
