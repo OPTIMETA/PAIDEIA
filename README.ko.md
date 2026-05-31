@@ -175,9 +175,8 @@ Paideia의 우선순위는 이 원리를 명시적으로 반영합니다. 모든
 
 ### 사전 요구사항
 
-**필수**
+**필수 (두 설치 경로 공통)**
 
-- [Claude Code](https://claude.ai/claude-code) CLI
 - Python 3.9+ (플러그인이 의존성을 확인하고 설치를 제안합니다)
 - Unix 계열 쉘 (`bash` / `zsh`). 부트스트랩과 채점 명령이 heredoc·`mkdir -p`·`mktemp`·서브쉘 백그라운드 실행을 쓰기 때문에, Windows 네이티브 `cmd` / PowerShell은 현재 지원하지 않습니다.
 - **macOS**: `brew install poppler tesseract tesseract-lang`
@@ -190,9 +189,26 @@ Paideia의 우선순위는 이 원리를 명시적으로 반영합니다. 모든
 
 Ollama를 설치하지 않으셔도 괜찮습니다. 기본 OCR 엔진은 Claude 자체의 비전 기능이라, 별도로 설치할 것도 Claude Code 외에 추가로 구독할 서비스도 없습니다.
 
-### Claude Code 플러그인 마켓플레이스로 설치
+### Claude 데스크톱 앱으로 설치 (권장)
 
-Claude Code 안에서 **각 줄을 한 번에 하나씩** 실행해 주세요.
+Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:hwmap` 표 — 은 데스크톱 앱에서 에이전트가 출력하는 그대로 인라인 렌더링됩니다 (위 스크린샷 참고). 별도의 리더를 띄울 필요가 없어 가장 매끄러운 경험이 됩니다.
+
+1. [claude.ai/download](https://claude.ai/download)에서 Claude 데스크톱 앱을 설치하고 로그인해 주세요. macOS / Windows / Linux 모두 지원됩니다.
+2. 새 대화창을 열고 **각 줄을 한 번에 하나씩** 메시지로 보내 주세요:
+
+   ```
+   /plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
+   ```
+
+   ```
+   /plugin install paideia@paideia-marketplace
+   ```
+
+3. 이제 모든 대화창에서 14개의 `/paideia:` 슬래시 명령을 쓰실 수 있습니다. 이어서 아래 **코스별 부트스트랩**으로 넘어가세요.
+
+### Claude Code CLI로 설치
+
+터미널을 선호하신다면, 먼저 [Claude Code](https://claude.ai/claude-code) CLI를 설치하신 뒤 동일한 두 명령을 `claude` 안에서 **각 줄을 한 번에 하나씩** 실행해 주세요:
 
 ```
 /plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
@@ -204,7 +220,7 @@ Claude Code 안에서 **각 줄을 한 번에 하나씩** 실행해 주세요.
 
 > URL을 전부 적는 이유가 있습니다 — `owner/repo` 짧은 형태를 쓰면 CLI가 SSH를 먼저 시도하기 때문에, GitHub에 SSH 키가 등록돼 있지 않은 환경에서는 실패합니다. HTTPS URL을 쓰면 언제나 동작합니다.
 
-설치가 끝나면 14개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다.
+설치가 끝나면 14개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다. CLI를 쓰신다면 아래 *읽기 팁: Obsidian을 쓰세요* 섹션을 참고해 Obsidian을 함께 설정해 두세요 — 터미널은 수식을 렌더링하지 못합니다.
 
 ### 코스별 부트스트랩
 

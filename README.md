@@ -177,9 +177,8 @@ Supporting: `/paideia:hwmap` surfaces HW-density exam-probability, `/paideia:ini
 
 ### Prerequisites
 
-**Required**
+**Required (both install paths)**
 
-- [Claude Code](https://claude.ai/claude-code) CLI
 - Python 3.9+ (the plugin checks + offers to install its deps)
 - A Unix-style shell (`bash` / `zsh`). The bootstrap + grade commands use heredocs, `mkdir -p`, `mktemp`, and subshell backgrounding — native Windows `cmd` / PowerShell isn't currently supported.
 - **macOS**: `brew install poppler tesseract tesseract-lang`
@@ -192,9 +191,26 @@ Supporting: `/paideia:hwmap` surfaces HW-density exam-probability, `/paideia:ini
 
 If you don't install Ollama, Paideia's default OCR engine is Claude's own vision — nothing extra to install, nothing extra to subscribe to beyond Claude Code itself.
 
-### Install via Claude Code plugin marketplace
+### Install via the Claude desktop app (recommended)
 
-Run each line as a separate command inside Claude Code:
+The desktop app is the smoothest reading surface for Paideia — `summary.md`, `patterns.md`, `coverage.md`, and `/paideia:hwmap` tables render inline as the agent emits them (see the screenshot grid above), so there's no separate reader to keep open.
+
+1. Download Claude Desktop from [claude.ai/download](https://claude.ai/download) and sign in. Available for macOS, Windows, and Linux.
+2. Open any new conversation and run each line as its own message:
+
+   ```
+   /plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
+   ```
+
+   ```
+   /plugin install paideia@paideia-marketplace
+   ```
+
+3. The 14 `/paideia:` slash commands are now available in every conversation. Continue to **Per-course bootstrap** below.
+
+### Install via the Claude Code CLI
+
+If you prefer the terminal, install [Claude Code](https://claude.ai/claude-code) first, then run the same two commands inside `claude`, each as a separate line:
 
 ```
 /plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
@@ -206,7 +222,7 @@ Run each line as a separate command inside Claude Code:
 
 > The full `https://...` URL is deliberate — the `owner/repo` shorthand makes the CLI try SSH first, which fails if you don't have a GitHub SSH key registered. HTTPS always works.
 
-After install, 14 slash commands become available under the `/paideia:` namespace.
+After install, 14 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
 
 ### Per-course bootstrap
 
