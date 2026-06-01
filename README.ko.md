@@ -208,7 +208,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
    /plugin install paideia@paideia-marketplace
    ```
 
-3. 이제 모든 대화창에서 14개의 `/paideia:` 슬래시 명령을 쓰실 수 있습니다. 이어서 아래 **코스별 부트스트랩**으로 넘어가세요.
+3. 이제 모든 대화창에서 15개의 `/paideia:` 슬래시 명령을 쓰실 수 있습니다. 이어서 아래 **코스별 부트스트랩**으로 넘어가세요.
 
 ### Claude Code CLI로 설치
 
@@ -224,7 +224,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
 
 > URL을 전부 적는 이유가 있습니다 — `owner/repo` 짧은 형태를 쓰면 CLI가 SSH를 먼저 시도하기 때문에, GitHub에 SSH 키가 등록돼 있지 않은 환경에서는 실패합니다. HTTPS URL을 쓰면 언제나 동작합니다.
 
-설치가 끝나면 14개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다. CLI를 쓰신다면 아래 *읽기 팁: Obsidian을 쓰세요* 섹션을 참고해 Obsidian을 함께 설정해 두세요 — 터미널은 수식을 렌더링하지 못합니다.
+설치가 끝나면 15개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다. CLI를 쓰신다면 아래 *읽기 팁: Obsidian을 쓰세요* 섹션을 참고해 Obsidian을 함께 설정해 두세요 — 터미널은 수식을 렌더링하지 못합니다.
 
 ### 코스별 부트스트랩
 
@@ -383,11 +383,12 @@ Claude Code에서:
 
 ---
 
-## 명령어 (총 14개)
+## 명령어 (총 15개)
 
 | 명령 | 용도 |
 |------|------|
 | `/paideia:init-course` | 새 코스 폴더 부트스트랩 (의존성 확인, 골격, 메타데이터 입력, 백그라운드 `ollama pull`) |
+| `/paideia:doctor [--fix]` | 설치 + 워크스페이스 진단 (Python, poppler, tesseract, Ollama/Qwen3-VL, 코스 폴더, `.course-meta`, 쓰기 경로, statusline 와이어링). `--fix`는 권한이 필요 없는 문제만 자동 복구 |
 | `/paideia:ingest [--force]` | `materials/**`의 모든 PDF를 `converted/**`의 마크다운으로 변환. 비전 파이프라인(PDF당 하나씩 병렬 에이전트, LaTeX 충실)으로 일괄 처리합니다. |
 | `/paideia:analyze [힌트]` | `course-index/{summary,patterns,coverage}.md` 구축 |
 | `/paideia:hwmap hot\|<§>` | 숙제 밀도 순으로 🔥🔥 Exam-primary 절 띄우기 |
@@ -495,12 +496,13 @@ PAIDEIA/
     │   │   ├── SKILL.md                 # 드릴 기본 단위 (twin, blind, chain, mock)
     │   │   └── twin-recipe.md           # 변형 생성 불변식 규칙
     │   └── answer-processing/SKILL.md   # 필기 OCR 결과의 전략 채점
-    ├── commands/                        # 14개 슬래시 명령
-    │   ├── init-course.md  ingest.md    analyze.md   hwmap.md
-    │   ├── pattern.md      derive.md    quiz.md      blind.md
-    │   ├── twin.md         chain.md     mock.md      grade.md
-    │   └── weakmap.md      cheatsheet.md
+    ├── commands/                        # 15개 슬래시 명령
+    │   ├── init-course.md  doctor.md    ingest.md    analyze.md
+    │   ├── hwmap.md        pattern.md   derive.md    quiz.md
+    │   ├── blind.md        twin.md      chain.md     mock.md
+    │   └── grade.md        weakmap.md   cheatsheet.md
     └── scripts/
+        ├── doctor.py                    # /paideia:doctor: 설치 + 워크스페이스 진단, 권한 불필요 --fix
         ├── vision_ocr.py                # 선택적 사용: --ocr=ollama|tesseract 경로에서 쓰는 ollama qwen3-vl + tesseract 드라이버
         └── statusline.py                # Claude Code statusline 슬롯용 — `paideia · <COURSE> · D-N · <phase> · P<k> ↑`를 출력
 ```

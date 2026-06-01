@@ -226,7 +226,7 @@ If you prefer the terminal, install [Claude Code](https://claude.ai/claude-code)
 
 > The full `https://...` URL is deliberate — the `owner/repo` shorthand makes the CLI try SSH first, which fails if you don't have a GitHub SSH key registered. HTTPS always works.
 
-After install, 14 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
+After install, 15 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
 
 ### Per-course bootstrap
 
@@ -385,11 +385,12 @@ In Claude Code:
 
 ---
 
-## Commands (14 total)
+## Commands (15 total)
 
 | Command | Purpose |
 |---------|---------|
 | `/paideia:init-course` | Bootstrap a fresh course folder (dep check, skeleton, metadata prompt, background `ollama pull`) |
+| `/paideia:doctor [--fix]` | Diagnose the install + workspace (Python, poppler, tesseract, Ollama/Qwen3-VL, course folders, `.course-meta`, writable paths, statusline wiring); `--fix` repairs the permission-free issues |
 | `/paideia:ingest [--force]` | Every PDF in `materials/**` → markdown in `converted/**` via the vision pipeline (parallel agents, one per PDF, LaTeX-faithful). |
 | `/paideia:analyze [hints]` | Build `course-index/{summary,patterns,coverage}.md` |
 | `/paideia:hwmap hot\|<§>` | Surface 🔥🔥 Exam-primary sections ranked by HW density |
@@ -501,12 +502,13 @@ PAIDEIA/
     │   │   ├── SKILL.md                 # drill primitives (twin, blind, chain, mock)
     │   │   └── twin-recipe.md           # invariance rules for variant generation
     │   └── answer-processing/SKILL.md   # strategy-grade hand-written OCR output
-    ├── commands/                        # 14 slash commands
-    │   ├── init-course.md  ingest.md    analyze.md   hwmap.md
-    │   ├── pattern.md      derive.md    quiz.md      blind.md
-    │   ├── twin.md         chain.md     mock.md      grade.md
-    │   └── weakmap.md      cheatsheet.md
+    ├── commands/                        # 15 slash commands
+    │   ├── init-course.md  doctor.md    ingest.md    analyze.md
+    │   ├── hwmap.md        pattern.md   derive.md    quiz.md
+    │   ├── blind.md        twin.md      chain.md     mock.md
+    │   └── grade.md        weakmap.md   cheatsheet.md
     └── scripts/
+        ├── doctor.py                    # /paideia:doctor: install + workspace diagnostic, permission-free --fix
         ├── vision_ocr.py                # opt-in: ollama qwen3-vl driver + tesseract forcing, for --ocr=ollama|tesseract
         ├── statusline.py                # emits `paideia · <COURSE> · D-N · <phase> · P<k> ↑` for Claude Code's statusline slot
         └── session_start.py             # SessionStart hook: two-line "phase / top-miss / next command" at the top of every new session
