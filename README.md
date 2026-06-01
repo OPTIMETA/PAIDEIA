@@ -28,6 +28,10 @@
     <img height="34" src="https://img.shields.io/badge/GeekNews-%231%20on%2026.05.26-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews #1 on 26.05.26">
   </a>
   &nbsp;
+  <a href="https://news.hada.io/weekly/202622">
+    <img height="34" src="https://img.shields.io/badge/GeekNews%20Weekly-%23360-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews Weekly #360">
+  </a>
+  &nbsp;
   <a href="https://www.producthunt.com/products/paideia">
     <img height="34" src="https://img.shields.io/badge/Product%20Hunt-Launched-333333?style=for-the-badge&logo=producthunt&logoColor=white&labelColor=000000&color=333333" alt="Product Hunt launch">
   </a>
