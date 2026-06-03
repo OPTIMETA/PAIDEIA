@@ -6,6 +6,14 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/OPTIMETA/PAIDEIA-Alt"><img height="30" src="https://img.shields.io/badge/Exam_Radar-OPTIMETA_Alt_plugin-333333?style=for-the-badge&labelColor=000000&color=333333" alt="Exam Radar — OPTIMETA Alt plugin"></a>
+</p>
+
+<p align="center">
+  <sub><em>Capture lectures with <a href="https://github.com/OPTIMETA/PAIDEIA-Alt"><strong>Exam Radar</strong></a> — OPTIMETA's Alt plugin — and study them with Paideia. Install it in Alt and run the two together: the whole arc, from sitting in the lecture to studying for the exam, lands in one workflow. Pipe a roadmap straight in with <code>/paideia:alt</code>.</em></sub>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/github/license/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="License">
   <img src="https://img.shields.io/github/stars/TaewoooPark/PAIDEIA?style=flat-square&logo=github&logoColor=white&labelColor=000000&color=333333&cacheSeconds=3600" alt="GitHub stars">
   <img src="https://img.shields.io/github/last-commit/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="Last commit">
@@ -226,7 +234,7 @@ If you prefer the terminal, install [Claude Code](https://claude.ai/claude-code)
 
 > The full `https://...` URL is deliberate — the `owner/repo` shorthand makes the CLI try SSH first, which fails if you don't have a GitHub SSH key registered. HTTPS always works.
 
-After install, 15 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
+After install, 16 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
 
 ### Per-course bootstrap
 
@@ -287,7 +295,8 @@ my-course/
 ├── course-index/                    # knowledge base — built by /paideia:analyze
 │   ├── summary.md                   # topic tree (§1, §1.1, §2, …)
 │   ├── patterns.md                  # recurring solution patterns, labeled P1, P2, …
-│   └── coverage.md                  # HW ↔ § map with 🔥🔥 / 🔥 / 🟡 / ⚪ exam tiers
+│   ├── coverage.md                  # HW ↔ § map with 🔥🔥 / 🔥 / 🟡 / ⚪ exam tiers
+│   └── radar.md                     # lecture-emphasis signal — imported by /paideia:alt
 │
 ├── answers/                         # YOU DROP HAND-WRITTEN SCAN PDFs HERE
 │   └── converted/                   # /paideia:grade writes OCR'd markdown here
@@ -322,6 +331,10 @@ If you run Paideia from the CLI rather than the Claude desktop app, this is the 
 - Works entirely offline, free, local. Consistent with Paideia's philosophy: your notes, your disk, your tool
 
 VS Code with a markdown-math extension works too. The terminal — even with a markdown preview — is bad for math; don't fight that.
+
+## And the lecture end: Alt
+
+Obsidian is the companion at the reading end. **[Alt](https://www.altalt.io/ko/)** is the companion at the other end — where the lectures come in. Alt records and transcribes your lectures, and OPTIMETA's **Exam Radar** plugin runs inside it to rank topics by how strongly the professor emphasized them out loud. Send that into Paideia with `/paideia:alt`, and the loop closes: **attend the lecture → capture it → extract the exam signal → study what matters.** Lectures live in Alt, deep personal study lives in Paideia, and Exam Radar is the bridge — finally one continuous workflow instead of scattered tools.
 
 ---
 
@@ -385,7 +398,7 @@ In Claude Code:
 
 ---
 
-## Commands (15 total)
+## Commands (16 total)
 
 | Command | Purpose |
 |---------|---------|
@@ -404,6 +417,7 @@ In Claude Code:
 | `/paideia:grade [--ocr=<engine>] [path]` | OCR answer PDF via the engine set in `.course-meta` (Claude vision / Ollama / Tesseract), strategy-grade, append `errors/log.md` |
 | `/paideia:weakmap [concept]` | Priority-ranked weakness report saved to `weakmap/weakmap_<ts>.md` |
 | `/paideia:cheatsheet [--pdf]` | Error-driven one-pager |
+| `/paideia:alt [paste]` | Import an OPTIMETA Exam Radar (Alt plugin) export → `course-index/radar.md` + a lecture-emphasis column on `coverage.md` + a gold-zone weakmap |
 
 ---
 
@@ -501,12 +515,14 @@ PAIDEIA/
     │   ├── exam-drill/
     │   │   ├── SKILL.md                 # drill primitives (twin, blind, chain, mock)
     │   │   └── twin-recipe.md           # invariance rules for variant generation
-    │   └── answer-processing/SKILL.md   # strategy-grade hand-written OCR output
-    ├── commands/                        # 15 slash commands
+    │   ├── answer-processing/SKILL.md   # strategy-grade hand-written OCR output
+    │   └── alt-import/SKILL.md          # import an Exam Radar (Alt) export → radar.md + coverage lecture column
+    ├── commands/                        # 16 slash commands
     │   ├── init-course.md  doctor.md    ingest.md    analyze.md
     │   ├── hwmap.md        pattern.md   derive.md    quiz.md
     │   ├── blind.md        twin.md      chain.md     mock.md
-    │   └── grade.md        weakmap.md   cheatsheet.md
+    │   ├── grade.md        weakmap.md   cheatsheet.md
+    │   └── alt.md
     └── scripts/
         ├── doctor.py                    # /paideia:doctor: install + workspace diagnostic, permission-free --fix
         ├── vision_ocr.py                # opt-in: ollama qwen3-vl driver + tesseract forcing, for --ocr=ollama|tesseract
