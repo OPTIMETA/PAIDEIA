@@ -208,7 +208,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
    /plugin install paideia@paideia-marketplace
    ```
 
-3. 이제 모든 대화창에서 15개의 `/paideia:` 슬래시 명령을 쓰실 수 있습니다. 이어서 아래 **코스별 부트스트랩**으로 넘어가세요.
+3. 이제 모든 대화창에서 16개의 `/paideia:` 슬래시 명령을 쓰실 수 있습니다. 이어서 아래 **코스별 부트스트랩**으로 넘어가세요.
 
 ### Claude Code CLI로 설치
 
@@ -224,7 +224,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
 
 > URL을 전부 적는 이유가 있습니다 — `owner/repo` 짧은 형태를 쓰면 CLI가 SSH를 먼저 시도하기 때문에, GitHub에 SSH 키가 등록돼 있지 않은 환경에서는 실패합니다. HTTPS URL을 쓰면 언제나 동작합니다.
 
-설치가 끝나면 15개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다. CLI를 쓰신다면 아래 *읽기 팁: Obsidian을 쓰세요* 섹션을 참고해 Obsidian을 함께 설정해 두세요 — 터미널은 수식을 렌더링하지 못합니다.
+설치가 끝나면 16개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다. CLI를 쓰신다면 아래 *읽기 팁: Obsidian을 쓰세요* 섹션을 참고해 Obsidian을 함께 설정해 두세요 — 터미널은 수식을 렌더링하지 못합니다.
 
 ### 코스별 부트스트랩
 
@@ -285,7 +285,8 @@ my-course/
 ├── course-index/                    # 지식 베이스 — /paideia:analyze가 생성
 │   ├── summary.md                   # 주제 트리 (§1, §1.1, §2, …)
 │   ├── patterns.md                  # 반복되는 풀이 패턴, P1, P2, … 라벨
-│   └── coverage.md                  # HW ↔ § 매핑 + 🔥🔥 / 🔥 / 🟡 / ⚪ 시험 티어
+│   ├── coverage.md                  # HW ↔ § 매핑 + 🔥🔥 / 🔥 / 🟡 / ⚪ 시험 티어
+│   └── radar.md                     # 강의 강조 신호 — /paideia:alt가 임포트
 │
 ├── answers/                         # 직접 필기 스캔 PDF를 넣는 곳
 │   └── converted/                   # /paideia:grade가 OCR한 마크다운을 여기에 씁니다
@@ -383,7 +384,7 @@ Claude Code에서:
 
 ---
 
-## 명령어 (총 15개)
+## 명령어 (총 16개)
 
 | 명령 | 용도 |
 |------|------|
@@ -402,6 +403,7 @@ Claude Code에서:
 | `/paideia:grade [--ocr=<engine>] [경로]` | `.course-meta`의 엔진 선택(Claude 비전 / Ollama / Tesseract)으로 OCR 후 전략 채점, `errors/log.md`에 누적 기록 |
 | `/paideia:weakmap [개념]` | `weakmap/weakmap_<ts>.md`에 저장되는 우선순위 약점 리포트 |
 | `/paideia:cheatsheet [--pdf]` | 오류 주도 한 장짜리 치트시트 |
+| `/paideia:alt [붙여넣기]` | OPTIMETA Exam Radar(Alt 플러그인) 내보내기를 임포트 → `course-index/radar.md` + `coverage.md`의 강의 강조 열 + 골드존 weakmap |
 
 ---
 
@@ -495,12 +497,14 @@ PAIDEIA/
     │   ├── exam-drill/
     │   │   ├── SKILL.md                 # 드릴 기본 단위 (twin, blind, chain, mock)
     │   │   └── twin-recipe.md           # 변형 생성 불변식 규칙
-    │   └── answer-processing/SKILL.md   # 필기 OCR 결과의 전략 채점
-    ├── commands/                        # 15개 슬래시 명령
+    │   ├── answer-processing/SKILL.md   # 필기 OCR 결과의 전략 채점
+    │   └── alt-import/SKILL.md          # Exam Radar(Alt) 내보내기 임포트 → radar.md + coverage 강의 강조 열
+    ├── commands/                        # 16개 슬래시 명령
     │   ├── init-course.md  doctor.md    ingest.md    analyze.md
     │   ├── hwmap.md        pattern.md   derive.md    quiz.md
     │   ├── blind.md        twin.md      chain.md     mock.md
-    │   └── grade.md        weakmap.md   cheatsheet.md
+    │   ├── grade.md        weakmap.md   cheatsheet.md
+    │   └── alt.md
     └── scripts/
         ├── doctor.py                    # /paideia:doctor: 설치 + 워크스페이스 진단, 권한 불필요 --fix
         ├── vision_ocr.py                # 선택적 사용: --ocr=ollama|tesseract 경로에서 쓰는 ollama qwen3-vl + tesseract 드라이버

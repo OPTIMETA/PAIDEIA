@@ -226,7 +226,7 @@ If you prefer the terminal, install [Claude Code](https://claude.ai/claude-code)
 
 > The full `https://...` URL is deliberate — the `owner/repo` shorthand makes the CLI try SSH first, which fails if you don't have a GitHub SSH key registered. HTTPS always works.
 
-After install, 15 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
+After install, 16 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
 
 ### Per-course bootstrap
 
@@ -287,7 +287,8 @@ my-course/
 ├── course-index/                    # knowledge base — built by /paideia:analyze
 │   ├── summary.md                   # topic tree (§1, §1.1, §2, …)
 │   ├── patterns.md                  # recurring solution patterns, labeled P1, P2, …
-│   └── coverage.md                  # HW ↔ § map with 🔥🔥 / 🔥 / 🟡 / ⚪ exam tiers
+│   ├── coverage.md                  # HW ↔ § map with 🔥🔥 / 🔥 / 🟡 / ⚪ exam tiers
+│   └── radar.md                     # lecture-emphasis signal — imported by /paideia:alt
 │
 ├── answers/                         # YOU DROP HAND-WRITTEN SCAN PDFs HERE
 │   └── converted/                   # /paideia:grade writes OCR'd markdown here
@@ -385,7 +386,7 @@ In Claude Code:
 
 ---
 
-## Commands (15 total)
+## Commands (16 total)
 
 | Command | Purpose |
 |---------|---------|
@@ -404,6 +405,7 @@ In Claude Code:
 | `/paideia:grade [--ocr=<engine>] [path]` | OCR answer PDF via the engine set in `.course-meta` (Claude vision / Ollama / Tesseract), strategy-grade, append `errors/log.md` |
 | `/paideia:weakmap [concept]` | Priority-ranked weakness report saved to `weakmap/weakmap_<ts>.md` |
 | `/paideia:cheatsheet [--pdf]` | Error-driven one-pager |
+| `/paideia:alt [paste]` | Import an OPTIMETA Exam Radar (Alt plugin) export → `course-index/radar.md` + a lecture-emphasis column on `coverage.md` + a gold-zone weakmap |
 
 ---
 
@@ -501,12 +503,14 @@ PAIDEIA/
     │   ├── exam-drill/
     │   │   ├── SKILL.md                 # drill primitives (twin, blind, chain, mock)
     │   │   └── twin-recipe.md           # invariance rules for variant generation
-    │   └── answer-processing/SKILL.md   # strategy-grade hand-written OCR output
-    ├── commands/                        # 15 slash commands
+    │   ├── answer-processing/SKILL.md   # strategy-grade hand-written OCR output
+    │   └── alt-import/SKILL.md          # import an Exam Radar (Alt) export → radar.md + coverage lecture column
+    ├── commands/                        # 16 slash commands
     │   ├── init-course.md  doctor.md    ingest.md    analyze.md
     │   ├── hwmap.md        pattern.md   derive.md    quiz.md
     │   ├── blind.md        twin.md      chain.md     mock.md
-    │   └── grade.md        weakmap.md   cheatsheet.md
+    │   ├── grade.md        weakmap.md   cheatsheet.md
+    │   └── alt.md
     └── scripts/
         ├── doctor.py                    # /paideia:doctor: install + workspace diagnostic, permission-free --fix
         ├── vision_ocr.py                # opt-in: ollama qwen3-vl driver + tesseract forcing, for --ocr=ollama|tesseract
