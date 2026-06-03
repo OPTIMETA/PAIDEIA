@@ -14,10 +14,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/license/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="라이선스">
-  <img src="https://img.shields.io/github/stars/TaewoooPark/PAIDEIA?style=flat-square&logo=github&logoColor=white&labelColor=000000&color=333333&cacheSeconds=3600" alt="GitHub 스타 수">
-  <img src="https://img.shields.io/github/last-commit/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="최근 커밋">
-  <img src="https://img.shields.io/github/languages/top/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="주요 언어">
+  <img src="https://img.shields.io/github/license/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="라이선스">
+  <img src="https://img.shields.io/github/stars/OPTIMETA/PAIDEIA?style=flat-square&logo=github&logoColor=white&labelColor=000000&color=333333&cacheSeconds=3600" alt="GitHub 스타 수">
+  <img src="https://img.shields.io/github/last-commit/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="최근 커밋">
+  <img src="https://img.shields.io/github/languages/top/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="주요 언어">
   &nbsp;
   <img src="https://img.shields.io/badge/Claude%20Code-000000?style=flat-square&logo=anthropic&logoColor=white&labelColor=000000&cacheSeconds=3600" alt="Claude Code">
   <img src="https://img.shields.io/badge/Plugin-000000?style=flat-square&labelColor=000000&color=000000&cacheSeconds=3600" alt="Plugin">
@@ -54,10 +54,10 @@
 <p align="center">
   <a href="./README.md">English README</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TaewoooPark/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI 에디션</a>
+  <a href="https://github.com/OPTIMETA/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI 에디션</a>
 </p>
 
-> **Claude Code 대신 OpenAI Codex CLI를 쓰시나요?** 같은 도구, 같은 디렉터리 구조, 같은 라이선스 — 2026-04-21에 Claude Code Pro 제한 보도로 잠깐 혼란이 돌던 시점에 Codex용 포팅이 진행됐습니다. Anthropic은 이후 "일부 신규 사용자 대상의 한정 테스트였을 뿐"이라고 정정했지만, 이 포트는 어느 쪽 CLI든 이미 결제 중인 환경에서 Paideia를 돌릴 수 있게 해 주는 CLI-중립 대안으로 그대로 쓸모가 있습니다 → **[PAIDEIA-codex](https://github.com/TaewoooPark/PAIDEIA-codex)**.
+> **Claude Code 대신 OpenAI Codex CLI를 쓰시나요?** 같은 도구, 같은 디렉터리 구조, 같은 라이선스 — 2026-04-21에 Claude Code Pro 제한 보도로 잠깐 혼란이 돌던 시점에 Codex용 포팅이 진행됐습니다. Anthropic은 이후 "일부 신규 사용자 대상의 한정 테스트였을 뿐"이라고 정정했지만, 이 포트는 어느 쪽 CLI든 이미 결제 중인 환경에서 Paideia를 돌릴 수 있게 해 주는 CLI-중립 대안으로 그대로 쓸모가 있습니다 → **[PAIDEIA-codex](https://github.com/OPTIMETA/PAIDEIA-codex)**.
 
 > **보안 안내.** 이 저장소가 PAIDEIA의 원본 저장소입니다. PAIDEIA는 Claude Code 플러그인으로 설치되며, `.zip` 다운로드, `.exe` 실행, 별도 installer 설치를 요구하지 않습니다. 이 README에서 명시적으로 연결한 저장소가 아니라면, 같은 PAIDEIA 이름을 쓰는 다른 저장소는 이 프로젝트와 아무 관련이 없습니다.
 
@@ -209,7 +209,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
 2. 새 대화창을 열고 **각 줄을 한 번에 하나씩** 메시지로 보내 주세요:
 
    ```
-   /plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
+   /plugin marketplace add https://github.com/OPTIMETA/PAIDEIA.git
    ```
 
    ```
@@ -223,7 +223,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
 터미널을 선호하신다면, 먼저 [Claude Code](https://claude.ai/claude-code) CLI를 설치하신 뒤 동일한 두 명령을 `claude` 안에서 **각 줄을 한 번에 하나씩** 실행해 주세요:
 
 ```
-/plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
+/plugin marketplace add https://github.com/OPTIMETA/PAIDEIA.git
 ```
 
 ```

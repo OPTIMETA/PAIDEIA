@@ -14,10 +14,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/license/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="License">
-  <img src="https://img.shields.io/github/stars/TaewoooPark/PAIDEIA?style=flat-square&logo=github&logoColor=white&labelColor=000000&color=333333&cacheSeconds=3600" alt="GitHub stars">
-  <img src="https://img.shields.io/github/last-commit/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="Last commit">
-  <img src="https://img.shields.io/github/languages/top/TaewoooPark/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="Top language">
+  <img src="https://img.shields.io/github/license/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="License">
+  <img src="https://img.shields.io/github/stars/OPTIMETA/PAIDEIA?style=flat-square&logo=github&logoColor=white&labelColor=000000&color=333333&cacheSeconds=3600" alt="GitHub stars">
+  <img src="https://img.shields.io/github/last-commit/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="Last commit">
+  <img src="https://img.shields.io/github/languages/top/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="Top language">
   &nbsp;
   <img src="https://img.shields.io/badge/Claude%20Code-000000?style=flat-square&logo=anthropic&logoColor=white&labelColor=000000&cacheSeconds=3600" alt="Claude Code">
   <img src="https://img.shields.io/badge/Plugin-000000?style=flat-square&labelColor=000000&color=000000&cacheSeconds=3600" alt="Plugin">
@@ -54,12 +54,12 @@
 <p align="center">
   <a href="./README.ko.md">한국어 README</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/TaewoooPark/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI edition</a>
+  <a href="https://github.com/OPTIMETA/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI edition</a>
   &nbsp;·&nbsp;
   <a href="https://taewoopark.com"><strong>taewoopark.com</strong> — author site</a>
 </p>
 
-> **Using OpenAI Codex CLI instead of Claude Code?** Same tool, same on-disk layout, same license — ported to Codex on 2026-04-21 amid brief confusion over a reported Claude Code Pro-tier restriction that Anthropic later clarified was only a limited test for some new users. The port stands on its own as a CLI-agnostic alternative either way; pick whichever agentic CLI you already pay for → **[PAIDEIA-codex](https://github.com/TaewoooPark/PAIDEIA-codex)**.
+> **Using OpenAI Codex CLI instead of Claude Code?** Same tool, same on-disk layout, same license — ported to Codex on 2026-04-21 amid brief confusion over a reported Claude Code Pro-tier restriction that Anthropic later clarified was only a limited test for some new users. The port stands on its own as a CLI-agnostic alternative either way; pick whichever agentic CLI you already pay for → **[PAIDEIA-codex](https://github.com/OPTIMETA/PAIDEIA-codex)**.
 
 > **Security notice.** This is the original PAIDEIA repository. PAIDEIA is installed as a Claude Code plugin and never asks you to download a `.zip`, run an `.exe`, or use any installer. Any other repository using the PAIDEIA name is not affiliated with this project unless it is explicitly linked from this README.
 
@@ -211,7 +211,7 @@ The desktop app is the smoothest reading surface for Paideia — `summary.md`, `
 2. Open any new conversation and run each line as its own message:
 
    ```
-   /plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
+   /plugin marketplace add https://github.com/OPTIMETA/PAIDEIA.git
    ```
 
    ```
@@ -225,7 +225,7 @@ The desktop app is the smoothest reading surface for Paideia — `summary.md`, `
 If you prefer the terminal, install [Claude Code](https://claude.ai/claude-code) first, then run the same two commands inside `claude`, each as a separate line:
 
 ```
-/plugin marketplace add https://github.com/TaewoooPark/PAIDEIA.git
+/plugin marketplace add https://github.com/OPTIMETA/PAIDEIA.git
 ```
 
 ```
