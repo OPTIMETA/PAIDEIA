@@ -15,6 +15,8 @@ Procedure:
 
 1. **Load problem statement ONLY** from `converted/homework/<n>.md` or `converted/textbook/<ch>.md` (for textbook examples). Do NOT open the solution yet.
 
+   **Confirm a reference solution exists first — before spending the user's effort.** A blind drill grades the user's strategy against the known solution, so without one there is nothing to check. Verify (do NOT read its contents yet) that the matching solution is ingested: `converted/solutions/<n>_sol.md` for a homework problem (e.g. `3.3` → `converted/solutions/hw3_sol.md`), or the worked-example section inside `converted/textbook/<ch>.md` for a textbook example. If it is missing, **stop here without requesting a strategy** and tell the user (in $INTERFACE_LANG): no reference solution for this problem is ingested, so a blind strategy-check can't be verified. Offer the concrete next steps — add the solution to `materials/solutions/` and run `/paideia:ingest`, or pick a problem that has a solution (list which `converted/solutions/*_sol.md` exist), or drill it instead with `/paideia:twin <id>` or `/paideia:quiz` (neither needs a pre-existing per-problem solution). Never fabricate a solution to grade against.
+
 2. **Present the problem verbatim** to the user.
 
 3. **Request strategy** (3–5 lines in $INTERFACE_LANG prose, no math typing). The 3 axes to ask about:
@@ -29,7 +31,7 @@ Procedure:
 
 4. **Wait for response.** Do NOT proceed until the user answers.
 
-5. **Load solution** from `converted/solutions/<n>.md` (or `converted/textbook/...` for example). Compare 3 axes:
+5. **Load solution** from `converted/solutions/<n>_sol.md` (or the worked-example section of `converted/textbook/<ch>.md` for an example) — the same file confirmed present in Step 1. Compare 3 axes:
 
    a. **Pattern identification** — correct Pk(s)?
    b. **Variable choice** — correct hold-fixed set?
