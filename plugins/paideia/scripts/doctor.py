@@ -71,6 +71,7 @@ ERRORS_LOG_SEED = """# Error log
   pattern: <Pk>
   error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
   summary: "<1 line>"
+  source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
   date: <ISO8601>
 -->
 """

@@ -110,10 +110,11 @@ When any drill reveals an error, append to `errors/log.md`:
   pattern: <Pk from patterns.md>
   error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
   summary: "<one-line description>"
+  source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
   date: <ISO8601>
 ```
 
-`/weakmap` (top-level command) consumes this log; this skill just produces entries.
+This is the **same canonical schema** as `skills/answer-processing/SKILL.md` Step 6 — keep every key, including `source:` (the statusline's mock-phase detection regexes on it). `/weakmap` (top-level command) consumes this log; this skill just produces entries.
 
 ## Cross-skill coordination
 
