@@ -142,12 +142,27 @@ def top_miss(cwd: Path) -> str | None:
             text = Path(wms[0]).read_text(encoding="utf-8", errors="replace")
         except OSError:
             text = ""
-        m = _PATTERN_RX.search(text)
-        if m:
-            return m.group(1)
-        m = re.search(r"\bP(\d+)\b", text)
-        if m:
-            return f"P{m.group(1)}"
+        # The statusline's "Pk ↑" is the user's single focus pattern, so it must
+        # track the weakmap's PRIORITY ranking — not whatever pattern happens to
+        # be listed first. The "## Top 5 weaknesses" section is priority-ranked
+        # (#1 = drill this first); the "## Error histogram" above it is merely
+        # latest-per-pattern in log order. Read the Pk from the ranked section's
+        # **bold headlines** only: a headline names a real pattern ("**P6 — …**"),
+        # whereas the explanatory prose is littered with problem-ids ("mock-P5")
+        # and §-anchors that a loose `P\d+` scan would mistake for a pattern.
+        ranked = re.search(
+            r"^##\s+Top\s+5\s+weaknesses.*?(?=^##\s|\Z)",
+            text,
+            re.MULTILINE | re.DOTALL | re.IGNORECASE,
+        )
+        if ranked:
+            for headline in re.findall(r"\*\*([^*]+)\*\*", ranked.group(0)):
+                m = re.search(r"(?<![\w-])P(\d+)\b", headline)
+                if m:
+                    return f"P{m.group(1)}"
+        # A weakmap whose top entries are all §/topic-based (no Pk headline) —
+        # fall back to the most-frequent graded error pattern below, not to an
+        # arbitrary first token, which would surface a low-priority pattern.
     log_text = _read_errors_log(cwd)
     if log_text:
         counts: dict[str, int] = {}
