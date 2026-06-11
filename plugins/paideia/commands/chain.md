@@ -5,7 +5,7 @@ argument-hint: <N patterns to chain, default 2>
 
 ## Output language
 
-Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs, LaTeX, and YAML keys (`pattern:`, `error_type:`, `chain_problem`, etc.).
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs, LaTeX, and YAML keys (`problem_id:`, `pattern:`, `error_type:`, `source:`, etc.).
 
 Load `skills/exam-drill/SKILL.md`. Read `course-index/patterns.md`, `course-index/coverage.md`.
 
@@ -40,7 +40,14 @@ Procedure:
      - Did they identify all N patterns?
      - Did they use them in the correct order?
      - Does the final synthesis match?
-   - Log pattern-identification errors to `errors/log.md` with field `chain_problem`.
+   - Errors are logged by `/grade` using the **canonical `errors/log.md` schema
+     from `skills/answer-processing/SKILL.md` Step 6** — one entry per missed
+     pattern, with `problem_id: chain_<ts>-P<n>`, `pattern: <Pk>`,
+     `error_type:` (`pattern-missed` for an unidentified or out-of-order
+     pattern), and `source: chain/<ts>`. Do **not** invent a `chain_problem`
+     key — `statusline.py`, `session_start.py`, and `weakmap` regex on
+     `pattern:`/`problem_id:`, so any drift silently hides chain errors from the
+     weakness snapshot.
 
 ## Why multi-pattern chaining
 
