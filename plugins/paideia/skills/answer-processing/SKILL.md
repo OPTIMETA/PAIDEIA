@@ -95,6 +95,17 @@ For each non-✅ entry, append to `errors/log.md`:
   date: <ISO>
 ```
 
+**Idempotent by `source:` — replace, don't pile up.** Re-grading the same
+answer (fix the OCR, re-run `/grade`) or re-running `/blind` on the same
+problem must NOT leave two copies of that attempt's errors in the log — the
+`weakmap` histogram would then double-count and over-rank those patterns.
+Before appending this grading's entries, **delete every existing list item
+whose `source:` equals the current source** (the same answer file / `blind/<id>`
+/ `chain/<ts>` you're about to write), then append the fresh block. The log
+stays a record of the *latest* grading of each source, not a transcript of every
+re-grade. (A genuinely new attempt belongs under a new `source:` — a new upload
+gets a new filename, so this only collapses true re-grades of the same file.)
+
 ### Step 7: Render grade summary (chat output)
 
 Compact table, no verbose explanations:
