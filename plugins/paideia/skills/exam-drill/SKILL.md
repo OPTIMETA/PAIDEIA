@@ -41,6 +41,15 @@ This skill assumes `/ingest` and `/analyze` have been run. If `course-index/patt
 
 ## Files written
 
+**`<ts>` is always `date +%Y%m%d_%H%M%S`** (e.g. `20260611_213627`) — one canonical
+timestamp format for every drill artifact (`/quiz`, `/twin`, `/chain`, `/mock`).
+Use underscores, not a `-` between date and time, and do not improvise a per-run
+format. The stem you save (`<id>_<ts>_sol.md`) must be the exact `<ts>` you print
+in the upload instruction (`answers/…_<ts>.pdf`) so `/grade` resolves it and the
+course folder doesn't accumulate mixed-format filenames. (Generate it once with
+`date +%Y%m%d_%H%M%S` and reuse that string for both the saved files and the
+printed upload name.)
+
 - `quizzes/<topic>_<ts>.md` — problem statements (answers in `_answers.md` sibling)
 - `twins/<origin>_<ts>.md` — variant problems
 - `chain/<ts>.md` — integration problems
