@@ -25,13 +25,16 @@ Procedure:
    - Part (c): ties together, requires pattern 3 (if N=3)
    - Final answer should synthesize
 
-3. **Save:**
-   - Problem → `chain/<ts>.md`
+3. **Save** (the stem is the **bare `<ts>` — never an `exam_` prefix**; this is a
+   chain drill, not a mock, even though the problem is exam-style):
+   - Problem → `chain/<ts>.md`     ← e.g. `chain/20260611_213319.md`, NOT `chain/exam_…`
    - Solution → `chain/<ts>_sol.md` (hidden)
 
-   (Filename note: the stem is the bare `<ts>` — no `exam_` prefix — so it lines
-   up with the `answers/chain_<ts>.pdf` upload and `/grade`'s `chain_<ts>.pdf →
-   chain/<ts>_sol.md` resolution rule. `exam_*` names belong to `/mock`.)
+   Why it matters: the user uploads their answer as `answers/chain_<ts>.pdf` and
+   `/grade` resolves `chain_<ts>.pdf → chain/<ts>_sol.md`. An `exam_` prefix here
+   makes the saved file disagree with both the upload name you print in Step 4 and
+   the `/grade` rule, and leaves a `chain/` folder with inconsistent stems.
+   `exam_*` names belong to `/mock` only.
 
 4. **Print:**
    - Full problem
