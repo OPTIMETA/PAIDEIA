@@ -96,7 +96,11 @@ Follow the answer-processing skill pipeline:
 3. **Identify reference solution.** Based on the answer filename stem:
    - `hw3.pdf` → `converted/solutions/hw3_sol.md` (or `converted/solutions/hw3.md`)
    - `diagnostic.pdf` → `quizzes/diagnostic_answers.md`
-   - `<topic>_<ts>.pdf` → `quizzes/<topic>_<ts>_answers.md`
+   - `mock_<ts>.pdf` (or `exam_<ts>.pdf`) → `mock/exam_<ts>_sol.md`. The scan is
+     usually timestamped later than the exam, so the `<ts>` rarely matches —
+     if there is no exact match, fall back to the most recent `mock/exam_*_sol.md`.
+   - `<topic>_<ts>.pdf` → `quizzes/<topic>_<ts>_answers.md` (this generic rule
+     fires only after the `mock_`/`twin_`/`chain_` prefixes above are ruled out)
    - `twin_<id>_<ts>.pdf` → `twins/<id>_<ts>_sol.md`
    - `chain_<ts>.pdf` → `chain/<ts>_sol.md`
    If cannot resolve, ask the user to specify.
