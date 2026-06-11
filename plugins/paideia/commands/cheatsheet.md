@@ -50,7 +50,32 @@ Procedure:
    - Convert cheatsheet/final.md to `cheatsheet/final.pdf` using reportlab
    - Use 2-column layout, 9pt font, no margins (for maximum density)
    - Remember: NO Unicode subscripts/superscripts in reportlab — use `<sub>`/`<super>` XML tags
-   - Use `pypandoc` if available as alternative: `pypandoc.convert_file('final.md', 'pdf', outputfile='final.pdf')`
+   - **CJK fonts (required when `INTERFACE_LANG=ko`).** reportlab's built-in
+     Type-1 fonts (Helvetica/Times) **cannot render Hangul** — every Korean
+     glyph silently comes out blank, so a `ko` cheatsheet PDF would be empty of
+     prose. Register a CJK-capable TrueType font first and use it for every
+     style (`fontName=`). Probe these candidates in order and fall back to the
+     first that exists:
+     ```python
+     from reportlab.pdfbase import pdfmetrics
+     from reportlab.pdfbase.ttfonts import TTFont
+     KFONT, candidates = "Helvetica", [
+         "/System/Library/Fonts/AppleSDGothicNeo.ttc",            # macOS
+         "/System/Library/Fonts/Supplemental/AppleGothic.ttf",    # macOS
+         "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",       # Ubuntu (fonts-nanum)
+         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",# Noto CJK
+     ]
+     for cand in candidates:
+         try:
+             pdfmetrics.registerFont(TTFont("KFont", cand)); KFONT = "KFont"; break
+         except Exception:
+             continue
+     ```
+     If none is found on a `ko` course, tell the user (in `INTERFACE_LANG`) to
+     `brew install font-nanum` / `sudo apt-get install fonts-nanum`, or keep the
+     `.md` and read it directly — don't ship a blank-glyph PDF.
+   - Use `pypandoc` if available as alternative: `pypandoc.convert_file('final.md', 'pdf', outputfile='final.pdf')` (its LaTeX engine needs a CJK-aware mainfont, e.g. `-V mainfont='Apple SD Gothic Neo'`, for Korean too)
+   - After the PDF is written and verified, remove any scratch build script you created (e.g. a temporary `cheatsheet/build_pdf.py`) so it isn't left in the user's committed course folder.
 
 5. **Print to chat** (in $INTERFACE_LANG):
    - Filename of the cheatsheet
