@@ -101,8 +101,11 @@ Follow the answer-processing skill pipeline:
      if there is no exact match, fall back to the most recent `mock/exam_*_sol.md`.
    - `<topic>_<ts>.pdf` → `quizzes/<topic>_<ts>_answers.md` (this generic rule
      fires only after the `mock_`/`twin_`/`chain_` prefixes above are ruled out)
-   - `twin_<id>_<ts>.pdf` → `twins/<id>_<ts>_sol.md`
-   - `chain_<ts>.pdf` → `chain/<ts>_sol.md`
+   - `twin_<id>_<ts>.pdf` → `twins/<id>_<ts>_sol.md`; if the `<ts>` doesn't
+     match exactly, fall back to the most recent `twins/<id>_*_sol.md`.
+   - `chain_<ts>.pdf` → `chain/<ts>_sol.md`; same as mock, the scan `<ts>`
+     rarely matches the generated one, so fall back to the most recent
+     `chain/*_sol.md`.
    If cannot resolve, ask the user to specify.
 
 4. **Strategy-based grading per problem:**

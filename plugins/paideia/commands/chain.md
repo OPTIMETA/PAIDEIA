@@ -26,8 +26,12 @@ Procedure:
    - Final answer should synthesize
 
 3. **Save:**
-   - Problem → `chain/exam_<ts>.md`
-   - Solution → `chain/exam_<ts>_sol.md` (hidden)
+   - Problem → `chain/<ts>.md`
+   - Solution → `chain/<ts>_sol.md` (hidden)
+
+   (Filename note: the stem is the bare `<ts>` — no `exam_` prefix — so it lines
+   up with the `answers/chain_<ts>.pdf` upload and `/grade`'s `chain_<ts>.pdf →
+   chain/<ts>_sol.md` resolution rule. `exam_*` names belong to `/mock`.)
 
 4. **Print:**
    - Full problem
