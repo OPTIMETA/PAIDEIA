@@ -54,16 +54,21 @@ Procedure:
      Type-1 fonts (Helvetica/Times) **cannot render Hangul** — every Korean
      glyph silently comes out blank, so a `ko` cheatsheet PDF would be empty of
      prose. Register a CJK-capable TrueType font first and use it for every
-     style (`fontName=`). Probe these candidates in order and fall back to the
-     first that exists:
+     style (`fontName=`). **reportlab's `TTFont` only parses TrueType (`glyf`)
+     outlines — a CFF/OpenType-flavoured `.ttc`/`.otf` raises on registration.**
+     macOS `AppleSDGothicNeo.ttc` is CFF on recent macOS, so it reliably throws
+     and the loop falls through to the next candidate; that's expected, not an
+     error. Probe these in order (glyf-loadable Hangul fonts first) and keep the
+     first that registers:
      ```python
      from reportlab.pdfbase import pdfmetrics
      from reportlab.pdfbase.ttfonts import TTFont
      KFONT, candidates = "Helvetica", [
-         "/System/Library/Fonts/AppleSDGothicNeo.ttc",            # macOS
-         "/System/Library/Fonts/Supplemental/AppleGothic.ttf",    # macOS
+         "/System/Library/Fonts/Supplemental/AppleGothic.ttf",    # macOS (glyf — loads)
          "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",       # Ubuntu (fonts-nanum)
+         "/opt/homebrew/share/fonts/NanumGothic.ttf",             # macOS Homebrew font-nanum
          "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",# Noto CJK
+         "/System/Library/Fonts/AppleSDGothicNeo.ttc",            # macOS (CFF — usually fails; last resort)
      ]
      for cand in candidates:
          try:
@@ -74,8 +79,29 @@ Procedure:
      If none is found on a `ko` course, tell the user (in `INTERFACE_LANG`) to
      `brew install font-nanum` / `sudo apt-get install fonts-nanum`, or keep the
      `.md` and read it directly — don't ship a blank-glyph PDF.
+   - **Glyph coverage — keep `\ell` as `ℓ`, don't downgrade to `l`.** In the
+     LaTeX→text pass, map `\ell` to the real `U+2113 ℓ` (the angular-momentum
+     symbol, all over central-force formulas) — **not** to an ASCII `l`. CJK
+     fonts almost always carry ℓ (AppleGothic, Nanum and Noto all do), so the
+     glyph renders; silently rewriting `\ell`→`l` makes `ℓ²/(2μr²)` read like a
+     lowercase L and is the more common failure here than a missing glyph. Only
+     fall back to italic `l` if the *registered* font truly lacks the glyph —
+     test it (a present glyph maps to a **non-zero** id; `0` is `.notdef`):
+     ```python
+     from reportlab.pdfbase.pdfmetrics import getFont
+     def has_glyph(ch):
+         if KFONT == "Helvetica": return False
+         return getFont(KFONT).face.charToGlyph.get(ord(ch), 0) != 0
+     ELL = "ℓ" if has_glyph("ℓ") else "<i>l</i>"   # use ELL wherever \ell / ℓ appears
+     ```
    - Use `pypandoc` if available as alternative: `pypandoc.convert_file('final.md', 'pdf', outputfile='final.pdf')` (its LaTeX engine needs a CJK-aware mainfont, e.g. `-V mainfont='Apple SD Gothic Neo'`, for Korean too)
-   - After the PDF is written and verified, remove any scratch build script you created (e.g. a temporary `cheatsheet/build_pdf.py`) so it isn't left in the user's committed course folder.
+   - **Build with a scratch script outside the course folder.** Don't write the
+     reportlab build script into `cheatsheet/` — it gets left behind in the
+     user's committed course folder when the post-run cleanup is skipped. Put it
+     in a temp path instead (e.g. `SCRIPT=$(mktemp /tmp/paideia-cheatsheet-XXXX.py)`),
+     run it from there to emit `cheatsheet/final.pdf`, then delete it. If you do
+     write one inside `cheatsheet/` anyway, remove it after the PDF is verified —
+     `cheatsheet/` should end with only `final.md` and `final.pdf`.
 
 5. **Print to chat** (in $INTERFACE_LANG):
    - Filename of the cheatsheet
