@@ -70,7 +70,11 @@ def parse_meta(cwd: Path) -> dict[str, str]:
         for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
             m = re.match(r"^\s*([A-Z_][A-Z0-9_]*)\s*:\s*(.+?)\s*$", line)
             if m:
-                meta[m.group(1)] = m.group(2)
+                # Strip a trailing `# comment` from every value so a hand-edited
+                # line like `COURSE_NAME: Complex Analysis  # main` doesn't leak
+                # the annotation into the statusline. Mirrors doctor.parse_meta
+                # and session_start.parse_meta — all three must agree.
+                meta[m.group(1)] = m.group(2).split("#", 1)[0].strip()
     except OSError:
         pass
     return meta
