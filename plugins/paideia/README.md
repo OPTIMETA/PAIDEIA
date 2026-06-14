@@ -17,7 +17,7 @@ tutorial ─▶ ingest ──▶ analyze ──▶ drill ──▶ grade ──�
 | Command | Purpose |
 |---------|---------|
 | `/paideia:init-course` | Bootstrap a fresh course folder (deps check, dir skeleton, metadata prompt, background `ollama pull`) |
-| `/paideia:tutorial [smoke]` | Create a 15-minute synthetic, attempt-first tutorial harness with `tutorial/{tutorial,attempt,rubric,verify}.md` |
+| `/paideia:tutorial [smoke]` | Create a 15-minute synthetic, attempt-first tutorial harness, then verify it with `plugins/paideia/scripts/tutorial_harness.py` (`init`, `verify --json`, `graph-check`, `guardrail-check`) |
 | `/paideia:ingest` | Every PDF → markdown via the vision pipeline (parallel agents, LaTeX-faithful) |
 | `/paideia:analyze` | Build `course-index/{summary,patterns,coverage}.md` |
 | `/paideia:hwmap hot` | Surface 🔥🔥 Exam-primary sections ranked by HW density |
