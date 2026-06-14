@@ -154,6 +154,20 @@ class TutorialHarnessTests(unittest.TestCase):
             self.assertNotEqual(bad.returncode, 0)
             self.assertIn("missing node types", bad.stderr)
 
+    def test_graph_check_rejects_evidence_quotes_not_in_source(self):
+        with self.init_root() as root_s:
+            root = Path(root_s)
+            graph_path = root / "course-index/context-graph.json"
+            graph = json.loads(graph_path.read_text(encoding="utf-8"))
+            graph["nodes"][0]["evidence_quote"] = "bogus quote that is not present in tutorial.md"
+            graph["edges"][0]["evidence_quote"] = "bogus edge quote that is not present in tutorial.md"
+            graph_path.write_text(json.dumps(graph), encoding="utf-8")
+
+            bad = self.run_harness(root, "graph-check")
+
+            self.assertNotEqual(bad.returncode, 0)
+            self.assertIn("evidence_quote not found in source", bad.stderr)
+
     def test_guardrail_check_blocks_overclaims_but_allows_negation(self):
         with self.init_root() as root_s:
             root = Path(root_s)
@@ -166,6 +180,27 @@ class TutorialHarnessTests(unittest.TestCase):
             blocked = self.run_harness(root, "guardrail-check")
             self.assertNotEqual(blocked.returncode, 0)
             self.assertIn("overclaiming", blocked.stderr)
+
+    def test_guardrail_check_blocks_unrelated_negation_bypass(self):
+        with self.init_root() as root_s:
+            root = Path(root_s)
+            bad = root / "bad.md"
+            bad.write_text("PAIDEIA is not merely a notebook; it visualizes model internal thoughts.\n", encoding="utf-8")
+
+            blocked = self.run_harness(root, "guardrail-check")
+
+            self.assertNotEqual(blocked.returncode, 0)
+            self.assertIn("overclaiming", blocked.stderr)
+
+    def test_guardrail_check_allows_direct_banned_claim_disclaimer(self):
+        with self.init_root() as root_s:
+            root = Path(root_s)
+            ok = root / "ok.md"
+            ok.write_text("PAIDEIA does not claim to visualize model internal thoughts.\n", encoding="utf-8")
+
+            result = self.run_harness(root, "guardrail-check")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

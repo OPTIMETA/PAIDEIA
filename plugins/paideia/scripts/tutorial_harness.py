@@ -292,15 +292,15 @@ def source_quote(path: Path, fallback: str) -> str:
 
 def build_graph(root: Path, verify_state: AttemptState, criteria: list[Criterion] | None = None) -> dict:
     criteria = criteria or []
-    attempt_quote = next((c.quote for c in criteria if c.quote), "Attempt worksheet seeded; no user evidence yet.")
+    attempt_quote = next((c.quote for c in criteria if c.quote), source_quote(root / "tutorial/attempt.md", "Tutorial attempt"))
     nodes = [
         {"id": "tutorial-course", "type": "course", "label": "Synthetic PAIDEIA tutorial course", "source_path": "tutorial/tutorial.md", "evidence_quote": source_quote(root / "tutorial/tutorial.md", "Synthetic tutorial course")},
         {"id": "tut-sec-index-shift", "type": "concept", "label": "Generating-function index shift", "source_path": "converted/lectures/tutorial-generating-functions.md", "evidence_quote": "The common move is an index shift:"},
         {"id": "tut-problem-t1", "type": "problem", "label": "Synthetic HW Problem T1", "source_path": "converted/homework/tutorial-hw.md", "evidence_quote": "Use the recurrence to derive a closed form for $A(x)$."},
         {"id": "tut-attempt-t1", "type": "attempt", "label": f"User attempt for Problem T1 ({verify_state.value})", "source_path": "tutorial/attempt.md", "evidence_quote": attempt_quote},
         {"id": "tut-rubric-t1", "type": "rubric", "label": "Verification rubric for Problem T1", "source_path": "tutorial/rubric.md", "evidence_quote": "Shows the shifted term as `2xA(x)` or equivalent"},
-        {"id": "tut-error-index-shift", "type": "error", "label": "Index shift error if factor x is missing", "source_path": "errors/log.md", "evidence_quote": "source: tutorial/attempt.md"},
-        {"id": "tut-review-index-shift", "type": "review_action", "label": "Redo index-shift drill when needed", "source_path": "reviews/actions.md", "evidence_quote": "/paideia:derive index-shift"},
+        {"id": "tut-error-index-shift", "type": "error", "label": "Index shift error if factor x is missing", "source_path": "errors/log.md", "evidence_quote": "Source-idempotent YAML entries."},
+        {"id": "tut-review-index-shift", "type": "review_action", "label": "Redo index-shift drill when needed", "source_path": "reviews/actions.md", "evidence_quote": "Review actions are local, editable study artifacts derived from observable attempt/error evidence."},
     ]
     edges = [
         {"from": "tutorial-course", "relation": "contains", "to": "tut-sec-index-shift", "source_path": "tutorial/tutorial.md", "evidence_quote": "Read a tiny source concept."},
@@ -308,13 +308,24 @@ def build_graph(root: Path, verify_state: AttemptState, criteria: list[Criterion
         {"from": "tut-attempt-t1", "relation": "answers", "to": "tut-problem-t1", "source_path": "tutorial/attempt.md", "evidence_quote": attempt_quote},
         {"from": "tut-attempt-t1", "relation": "verified_by", "to": "tut-rubric-t1", "source_path": "tutorial/rubric.md", "evidence_quote": "Verify only after `tutorial/attempt.md` contains a real attempt."},
         {"from": "tut-rubric-t1", "relation": "may_log", "to": "tut-error-index-shift", "source_path": "tutorial/rubric.md", "evidence_quote": "If the index shift fails"},
-        {"from": "tut-error-index-shift", "relation": "triggers", "to": "tut-review-index-shift", "source_path": "reviews/actions.md", "evidence_quote": "/paideia:derive index-shift"},
+        {"from": "tut-error-index-shift", "relation": "triggers", "to": "tut-review-index-shift", "source_path": "reviews/actions.md", "evidence_quote": "Review actions are local, editable study artifacts derived from observable attempt/error evidence."},
     ]
     return {"schema_version": 1, "generated_by": "plugins/paideia/scripts/tutorial_harness.py", "state": verify_state.value, "nodes": nodes, "edges": edges}
 
 
 def write_graph(root: Path, state: AttemptState, criteria: list[Criterion] | None = None) -> None:
     write_text(root / "course-index/context-graph.json", json.dumps(build_graph(root, state, criteria), indent=2, ensure_ascii=False) + "\n")
+
+
+def normalize_evidence_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def evidence_quote_in_source(root: Path, source_path: str, quote: str) -> bool:
+    source = root / source_path
+    if not source.exists() or not quote:
+        return False
+    return normalize_evidence_text(quote) in normalize_evidence_text(read_text(source))
 
 
 def init(root: Path) -> int:
@@ -457,8 +468,11 @@ def graph_check(root: Path) -> int:
                 if not n.get(field):
                     errors.append(f"node {n.get('id', '<unknown>')} missing {field}")
             src = n.get("source_path")
+            quote = n.get("evidence_quote")
             if src and not (root / src).exists():
                 errors.append(f"node {n.get('id')} source_path missing: {src}")
+            elif src and quote and not evidence_quote_in_source(root, src, quote):
+                errors.append(f"node {n.get('id')} evidence_quote not found in source: {src}")
         for e in graph.get("edges", []):
             for field in ("from", "relation", "to", "source_path", "evidence_quote"):
                 if not e.get(field):
@@ -466,8 +480,11 @@ def graph_check(root: Path) -> int:
             if e.get("from") not in node_ids or e.get("to") not in node_ids:
                 errors.append(f"edge references unknown node: {e}")
             src = e.get("source_path")
+            quote = e.get("evidence_quote")
             if src and not (root / src).exists():
                 errors.append(f"edge source_path missing: {src}")
+            elif src and quote and not evidence_quote_in_source(root, src, quote):
+                errors.append(f"edge {e.get('from')}->{e.get('to')} evidence_quote not found in source: {src}")
     if errors:
         for err in errors:
             print(f"graph-check FAIL: {err}", file=sys.stderr)
@@ -487,11 +504,27 @@ CLAIM_PATTERNS = (
     "model's thoughts",
     "student's thoughts",
 )
-NEGATION_RE = re.compile(r"\b(no|not|never|does not|do not|don't|cannot|can't|without|rather than|not model-internal|source-grounded)\b", re.I)
+NEGATION_RE = re.compile(r"\b(no|not|never|does not|do not|don't|cannot|can't|without)\b", re.I)
+
+
+def claim_directly_negated(sentence: str, claim: str) -> bool:
+    lower = sentence.lower()
+    start = lower.find(claim)
+    if start < 0:
+        return True
+    prefix = lower[:start]
+    prefix_clause = re.split(r"[.;:!?]", prefix)[-1]
+    if NEGATION_RE.search(prefix_clause):
+        return True
+    if re.search(r"\bdoes not claim to\b", prefix_clause, re.I):
+        return True
+    return False
 
 
 def sentence_allowed(sentence: str) -> bool:
-    return bool(NEGATION_RE.search(sentence))
+    lower = sentence.lower()
+    matched_claims = [claim for claim in CLAIM_PATTERNS if claim in lower]
+    return bool(matched_claims) and all(claim_directly_negated(sentence, claim) for claim in matched_claims)
 
 
 def guardrail_check(root: Path) -> int:
