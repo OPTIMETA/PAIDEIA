@@ -110,9 +110,9 @@ Read-only. Project `course-index/coverage.md` by the query. `blind` lists all ðŸ
 3. No filename or wording directly references the original problem ID.
 4. Final answer exists and is not pathological.
 
-## Error logging schema
+## Error ledger schema
 
-When any drill reveals an error, append to `errors/log.md`:
+When any drill reveals an error, update `errors/log.md` as the course's source-idempotent error ledger:
 
 ```yaml
 - problem_id: <HW#-P#, twin-id, or chain-ts>

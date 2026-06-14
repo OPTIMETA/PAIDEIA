@@ -18,7 +18,7 @@ answers/<quiz-name>.pdf      ← user uploads hand-written scan
       ↓ (pdf skill, OCR)
 answers/converted/<quiz-name>.md
       ↓ (this skill)
-grade report → stdout (compact) + errors/log.md (append)
+grade report → stdout (compact) + errors/log.md (source-idempotent ledger)
 ```
 
 ## Step-by-step procedure
@@ -80,11 +80,11 @@ For each problem/part, produce a verdict:
 
 **Do not** report line-by-line algebra mistakes unless they are specifically about sign errors or notation bugs that matter on the exam (e.g., missing $-$ on $\kappa$ definition, conjugate vs. transpose confusion).
 
-### Step 6: Log errors
+### Step 6: Update the error ledger
 
-**Canonical `errors/log.md` schema — single source of truth.** Every command that appends here (`/grade`, `/blind`, future drills) MUST use exactly these keys. Downstream readers (`statusline.py`, `weakmap`, `session_start.py`) pattern-match on `pattern:` and `problem_id:` lines; any drift silently hides entries.
+`errors/log.md` is the course's **source-idempotent error ledger**: a reviewable, local Markdown/YAML artifact derived from attempts, not a student profile or cognitive diagnosis. Every command that writes here (`/grade`, `/blind`, future drills) MUST use exactly these keys. Downstream readers (`statusline.py`, `weakmap`, `session_start.py`) pattern-match on `pattern:` and `problem_id:` lines; any drift silently hides entries.
 
-For each non-✅ entry, append to `errors/log.md`:
+For each non-✅ entry, write to `errors/log.md`:
 
 ```yaml
 - problem_id: <id>

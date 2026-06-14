@@ -64,9 +64,9 @@ WRITABLE_PATHS = [".", "converted", "answers/converted", "errors"]
 
 # Seed for errors/log.md — identical to init-course Step 4 so /grade and /weakmap
 # find the schema they expect.
-ERRORS_LOG_SEED = """# Error log
+ERRORS_LOG_SEED = """# Error ledger
 
-<!-- Append-only YAML entries. Schema:
+<!-- Source-idempotent YAML entries: keep the latest grading per source; a new attempt should use a new source. Schema:
 - problem_id: <id>
   pattern: <Pk>
   error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition

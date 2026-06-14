@@ -88,6 +88,10 @@ This plugin implements that cycle for the specific, bounded problem of **exam pr
 
 Every stage produces a markdown artifact that lives in your course folder forever. Nothing is ephemeral. Nothing is hidden behind an API. Nothing stops working when the next funding winter hits.
 
+### Source-grounded, not model-internal
+
+PAIDEIA's Course Context Graphs, Error Ledger, and tutorial verification files are human-reviewable study artifacts. They are built from course materials, user attempts, logged errors, and review actions; they do **not** claim to visualize model internal thoughts, hidden activations, or a faithful chain of model cognition. Any graph or trace language in PAIDEIA means an artifact-grounded interface over the course workspace, not mechanistic interpretability.
+
 ---
 
 ## What generic study tools can't do
@@ -174,6 +178,7 @@ Paideia's ranking is explicit about this, and every drill command honors it by d
 
 | Stage | What it does | Commands | Produces |
 |-------|-------------|----------|----------|
+| **Tutorial** | Run a synthetic attempt-first smoke test | `/paideia:tutorial` | `tutorial/{tutorial,attempt,rubric,verify}.md` — 15-minute harness with no real student data |
 | **Encounter** | Read the professor's signal | `/paideia:ingest` | `converted/**/*.md` — every lecture, textbook chapter, HW, solution, as clean markdown |
 | **Structure** | Extract the grammar of the course | `/paideia:analyze` | `course-index/{summary,patterns,coverage}.md` — topic tree, recurring solution patterns (P1..Pk), HW-density exam-tier ranking |
 | **Practice** | Active recall weighted by what the professor actually tests | `/paideia:quiz`, `/paideia:twin`, `/paideia:blind`, `/paideia:chain`, `/paideia:mock` | `quizzes/`, `twins/`, `chain/`, `mock/` — problems you solve on paper |
@@ -218,7 +223,7 @@ The desktop app is the smoothest reading surface for Paideia — `summary.md`, `
    /plugin install paideia@paideia-marketplace
    ```
 
-3. The 14 `/paideia:` slash commands are now available in every conversation. Continue to **Per-course bootstrap** below.
+3. The 17 `/paideia:` slash commands are now available in every conversation. Continue to **Per-course bootstrap** below.
 
 ### Install via the Claude Code CLI
 
@@ -234,7 +239,7 @@ If you prefer the terminal, install [Claude Code](https://claude.ai/claude-code)
 
 > The full `https://...` URL is deliberate — the `owner/repo` shorthand makes the CLI try SSH first, which fails if you don't have a GitHub SSH key registered. HTTPS always works.
 
-After install, 16 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
+After install, 17 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
 
 ### Per-course bootstrap
 
@@ -302,7 +307,16 @@ my-course/
 │   └── converted/                   # /paideia:grade writes OCR'd markdown here
 │
 ├── errors/
-│   └── log.md                       # append-only YAML error log (seed for /weakmap + /cheatsheet)
+│   └── log.md                       # source-idempotent YAML error ledger (seed for /weakmap + /cheatsheet)
+│
+├── reviews/
+│   └── actions.md                   # local review actions derived from attempt/error evidence
+│
+├── tutorial/                        # /paideia:tutorial synthetic attempt-first smoke test
+│   ├── tutorial.md
+│   ├── attempt.md
+│   ├── rubric.md
+│   └── verify.md
 │
 ├── quizzes/                         # /paideia:quiz — each problem has a hidden _answers.md sibling
 ├── mock/                            # /paideia:mock — full mock exams (hidden _sol.md siblings)
@@ -398,11 +412,12 @@ In Claude Code:
 
 ---
 
-## Commands (16 total)
+## Commands (17 total)
 
 | Command | Purpose |
 |---------|---------|
-| `/paideia:init-course` | Bootstrap a fresh course folder (dep check, skeleton, metadata prompt, background `ollama pull`) |
+| `/paideia:init-course` | Bootstrap a course folder (deps check, skeleton, metadata prompt, background `ollama pull`) |
+| `/paideia:tutorial [smoke]` | Create a 15-minute synthetic, attempt-first tutorial harness (`tutorial/{tutorial,attempt,rubric,verify}.md`) |
 | `/paideia:doctor [--fix]` | Diagnose the install + workspace (Python, poppler, tesseract, Ollama/Qwen3-VL, course folders, `.course-meta`, writable paths, statusline wiring); `--fix` repairs the permission-free issues |
 | `/paideia:ingest [--force]` | Every PDF in `materials/**` → markdown in `converted/**` via the vision pipeline (parallel agents, one per PDF, LaTeX-faithful). |
 | `/paideia:analyze [hints]` | Build `course-index/{summary,patterns,coverage}.md` |
@@ -414,7 +429,7 @@ In Claude Code:
 | `/paideia:twin <problem-id>` | Variant of a known problem — same pattern, new surface |
 | `/paideia:chain <N>` | Multi-pattern integration problem combining N patterns |
 | `/paideia:mock <minutes>` | Full mock exam, HW-density weighted |
-| `/paideia:grade [--ocr=<engine>] [path]` | OCR answer PDF via the engine set in `.course-meta` (Claude vision / Ollama / Tesseract), strategy-grade, append `errors/log.md` |
+| `/paideia:grade [--ocr=<engine>] [path]` | OCR answer PDF via the engine set in `.course-meta` (Claude vision / Ollama / Tesseract), strategy-grade, update the source-idempotent `errors/log.md` ledger |
 | `/paideia:weakmap [concept]` | Priority-ranked weakness report saved to `weakmap/weakmap_<ts>.md` |
 | `/paideia:cheatsheet [--pdf]` | Error-driven one-pager |
 | `/paideia:alt [paste]` | Import an OPTIMETA Exam Radar (Alt plugin) export → `course-index/radar.md` + a lecture-emphasis column on `coverage.md` + a gold-zone weakmap |
@@ -517,11 +532,11 @@ PAIDEIA/
     │   │   └── twin-recipe.md           # invariance rules for variant generation
     │   ├── answer-processing/SKILL.md   # strategy-grade hand-written OCR output
     │   └── alt-import/SKILL.md          # import an Exam Radar (Alt) export → radar.md + coverage lecture column
-    ├── commands/                        # 16 slash commands
-    │   ├── init-course.md  doctor.md    ingest.md    analyze.md
-    │   ├── hwmap.md        pattern.md   derive.md    quiz.md
-    │   ├── blind.md        twin.md      chain.md     mock.md
-    │   ├── grade.md        weakmap.md   cheatsheet.md
+    ├── commands/                        # 17 slash commands
+    │   ├── init-course.md  tutorial.md  doctor.md    ingest.md
+    │   ├── analyze.md      hwmap.md     pattern.md   derive.md
+    │   ├── quiz.md         blind.md     twin.md      chain.md
+    │   ├── mock.md         grade.md     weakmap.md   cheatsheet.md
     │   └── alt.md
     └── scripts/
         ├── doctor.py                    # /paideia:doctor: install + workspace diagnostic, permission-free --fix

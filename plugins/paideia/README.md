@@ -2,19 +2,22 @@
 
 Exam-formation plugin for math / physics / engineering courses. Local-first by construction — no SaaS, no cloud upload of your materials, no subscription.
 
+PAIDEIA graph/trace artifacts are source-grounded views over course files, attempts, error-ledger entries, and review actions. They do not visualize model internal thoughts or hidden activations.
+
 See the repo root `README.md` for the full manifesto, install steps, and workflow walk-through.
 
 ## Quick reference
 
 ```
-ingest ──▶ analyze ──▶ drill ──▶ grade ──▶ weakmap ──▶ cheatsheet
-   ▲                                                        │
-   └────────────────── feedback loop ───────────────────────┘
+tutorial ─▶ ingest ──▶ analyze ──▶ drill ──▶ grade ──▶ weakmap ──▶ cheatsheet
+   ▲                                                                  │
+   └──────────────────── attempt/error feedback loop ─────────────────┘
 ```
 
 | Command | Purpose |
 |---------|---------|
 | `/paideia:init-course` | Bootstrap a fresh course folder (deps check, dir skeleton, metadata prompt, background `ollama pull`) |
+| `/paideia:tutorial [smoke]` | Create a 15-minute synthetic, attempt-first tutorial harness with `tutorial/{tutorial,attempt,rubric,verify}.md` |
 | `/paideia:ingest` | Every PDF → markdown via the vision pipeline (parallel agents, LaTeX-faithful) |
 | `/paideia:analyze` | Build `course-index/{summary,patterns,coverage}.md` |
 | `/paideia:hwmap hot` | Surface 🔥🔥 Exam-primary sections ranked by HW density |
@@ -25,7 +28,7 @@ ingest ──▶ analyze ──▶ drill ──▶ grade ──▶ weakmap ─�
 | `/paideia:twin <problem-id>` | Variant — same pattern, new surface |
 | `/paideia:chain <N>` | Multi-pattern integration problem |
 | `/paideia:mock <minutes>` | Full mock exam, HW-density weighted |
-| `/paideia:grade [path]` | OCR answer PDF via local Qwen3-VL, strategy-grade |
+| `/paideia:grade [path]` | OCR answer PDF, strategy-grade, update the source-idempotent error ledger |
 | `/paideia:weakmap [concept]` | Priority-ranked weakness report |
 | `/paideia:cheatsheet [--pdf]` | Error-driven one-pager |
 

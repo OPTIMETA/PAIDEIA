@@ -121,7 +121,7 @@ Follow the answer-processing skill pipeline:
    ```
    Plus one closing line (in $INTERFACE_LANG): "Dominant issue: <type>. Next drill: /<command> <target>."
 
-6. **Log errors.** Append each non-✅ entry to `errors/log.md` in the YAML format from answer-processing SKILL.md.
+6. **Update the error ledger.** Write each non-✅ entry to `errors/log.md` using the source-idempotent YAML rules from `skills/answer-processing/SKILL.md`: replace existing entries for the same `source:`, append for genuinely new attempts.
 
 7. **Do NOT** print the full reference solution. The user can open it themselves if they want to study.
 

@@ -86,6 +86,10 @@
 
 각 단계는 당신의 코스 폴더에 영원히 남는 마크다운 파일 하나씩을 남깁니다. 휘발되는 것은 없고, API 뒤에 숨는 것도 없습니다. 다음 자금 한파가 닥쳐도 멈추는 것이 없습니다.
 
+### Source-grounded이지, 모델 내부 시각화가 아닙니다
+
+PAIDEIA의 Course Context Graph, Error Ledger, tutorial verification 파일은 사용자가 검토할 수 있는 학습 산출물입니다. 이들은 과목 자료, 사용자의 attempt, 기록된 error, review action에서 만들어지며, 모델의 내부 생각, hidden activation, 또는 모델 인지의 충실한 chain을 시각화한다고 주장하지 않습니다. PAIDEIA에서 graph나 trace라는 표현은 과목 workspace 위의 artifact-grounded interface를 뜻할 뿐, mechanistic interpretability 주장이 아닙니다.
+
 ---
 
 ## 일반적인 학습 도구가 하지 못하는 것
@@ -172,6 +176,7 @@ Paideia의 우선순위는 이 원리를 명시적으로 반영합니다. 모든
 
 | 단계 | 하는 일 | 명령 | 산출물 |
 |------|---------------|------|--------|
+| **튜토리얼 (Tutorial)** | synthetic 자료로 attempt-first smoke test를 실행합니다 | `/paideia:tutorial` | `tutorial/{tutorial,attempt,rubric,verify}.md` — 실제 학생 데이터 없는 15분 하네스 |
 | **대면 (Encounter)** | 교수님이 보낸 신호를 읽습니다 | `/paideia:ingest` | `converted/**/*.md` — 모든 강의노트·교재 챕터·숙제·풀이를 깨끗한 마크다운으로 |
 | **구조화 (Structure)** | 과목 고유의 문법을 추출합니다 | `/paideia:analyze` | `course-index/{summary,patterns,coverage}.md` — 주제 트리, 반복되는 풀이 패턴 (P1..Pk), 숙제 밀도 기반 출제 티어 |
 | **연습 (Practice)** | 교수님이 실제로 시험하는 것에 가중치를 두어 능동 회상을 수행합니다 | `/paideia:quiz`, `/paideia:twin`, `/paideia:blind`, `/paideia:chain`, `/paideia:mock` | `quizzes/`, `twins/`, `chain/`, `mock/` — 종이에 풀 문제들 |
@@ -216,7 +221,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
    /plugin install paideia@paideia-marketplace
    ```
 
-3. 이제 모든 대화창에서 16개의 `/paideia:` 슬래시 명령을 쓰실 수 있습니다. 이어서 아래 **코스별 부트스트랩**으로 넘어가세요.
+3. 이제 모든 대화창에서 17개의 `/paideia:` 슬래시 명령을 쓰실 수 있습니다. 이어서 아래 **코스별 부트스트랩**으로 넘어가세요.
 
 ### Claude Code CLI로 설치
 
@@ -232,7 +237,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
 
 > URL을 전부 적는 이유가 있습니다 — `owner/repo` 짧은 형태를 쓰면 CLI가 SSH를 먼저 시도하기 때문에, GitHub에 SSH 키가 등록돼 있지 않은 환경에서는 실패합니다. HTTPS URL을 쓰면 언제나 동작합니다.
 
-설치가 끝나면 16개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다. CLI를 쓰신다면 아래 *읽기 팁: Obsidian을 쓰세요* 섹션을 참고해 Obsidian을 함께 설정해 두세요 — 터미널은 수식을 렌더링하지 못합니다.
+설치가 끝나면 17개의 슬래시 명령이 `/paideia:` 네임스페이스로 제공됩니다. CLI를 쓰신다면 아래 *읽기 팁: Obsidian을 쓰세요* 섹션을 참고해 Obsidian을 함께 설정해 두세요 — 터미널은 수식을 렌더링하지 못합니다.
 
 ### 코스별 부트스트랩
 
@@ -300,7 +305,16 @@ my-course/
 │   └── converted/                   # /paideia:grade가 OCR한 마크다운을 여기에 씁니다
 │
 ├── errors/
-│   └── log.md                       # append-only YAML 오류 로그 (/weakmap, /cheatsheet의 원천)
+│   └── log.md                       # source-idempotent YAML 오류 ledger (/weakmap, /cheatsheet의 원천)
+│
+├── reviews/
+│   └── actions.md                   # attempt/error evidence에서 파생된 로컬 review action
+│
+├── tutorial/                        # /paideia:tutorial synthetic attempt-first smoke test
+│   ├── tutorial.md
+│   ├── attempt.md
+│   ├── rubric.md
+│   └── verify.md
 │
 ├── quizzes/                         # /paideia:quiz — 문제마다 숨겨진 _answers.md 형제
 ├── mock/                            # /paideia:mock — 모의고사 (숨겨진 _sol.md 형제)
@@ -396,11 +410,12 @@ Claude Code에서:
 
 ---
 
-## 명령어 (총 16개)
+## 명령어 (총 17개)
 
 | 명령 | 용도 |
 |------|------|
 | `/paideia:init-course` | 새 코스 폴더 부트스트랩 (의존성 확인, 골격, 메타데이터 입력, 백그라운드 `ollama pull`) |
+| `/paideia:tutorial [smoke]` | 15분 synthetic attempt-first tutorial harness 생성 (`tutorial/{tutorial,attempt,rubric,verify}.md`) |
 | `/paideia:doctor [--fix]` | 설치 + 워크스페이스 진단 (Python, poppler, tesseract, Ollama/Qwen3-VL, 코스 폴더, `.course-meta`, 쓰기 경로, statusline 와이어링). `--fix`는 권한이 필요 없는 문제만 자동 복구 |
 | `/paideia:ingest [--force]` | `materials/**`의 모든 PDF를 `converted/**`의 마크다운으로 변환. 비전 파이프라인(PDF당 하나씩 병렬 에이전트, LaTeX 충실)으로 일괄 처리합니다. |
 | `/paideia:analyze [힌트]` | `course-index/{summary,patterns,coverage}.md` 구축 |
@@ -412,7 +427,7 @@ Claude Code에서:
 | `/paideia:twin <problem-id>` | 같은 패턴, 새 표면의 변형 문제 |
 | `/paideia:chain <N>` | N개 패턴을 묶은 통합 문제 |
 | `/paideia:mock <분>` | 숙제 밀도 가중 모의고사 전체 |
-| `/paideia:grade [--ocr=<engine>] [경로]` | `.course-meta`의 엔진 선택(Claude 비전 / Ollama / Tesseract)으로 OCR 후 전략 채점, `errors/log.md`에 누적 기록 |
+| `/paideia:grade [--ocr=<engine>] [경로]` | `.course-meta`의 엔진 선택(Claude 비전 / Ollama / Tesseract)으로 OCR 후 전략 채점, source-idempotent `errors/log.md` ledger 갱신 |
 | `/paideia:weakmap [개념]` | `weakmap/weakmap_<ts>.md`에 저장되는 우선순위 약점 리포트 |
 | `/paideia:cheatsheet [--pdf]` | 오류 주도 한 장짜리 치트시트 |
 | `/paideia:alt [붙여넣기]` | OPTIMETA Exam Radar(Alt 플러그인) 내보내기를 임포트 → `course-index/radar.md` + `coverage.md`의 강의 강조 열 + 골드존 weakmap |

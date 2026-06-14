@@ -123,11 +123,11 @@ mkdir -p materials/{lectures,textbook,homework,solutions} \
          course-index quizzes mock twins chain derivations cheatsheet weakmap \
          answers/converted errors
 
-# Seed errors/log.md if missing (append-only log; /grade and /weakmap depend on it)
+# Seed errors/log.md if missing (source-idempotent ledger; /grade and /weakmap depend on it)
 [ -f errors/log.md ] || cat > errors/log.md <<'EOF'
-# Error log
+# Error ledger
 
-<!-- Append-only YAML entries. Schema:
+<!-- Source-idempotent YAML entries: keep the latest grading per source; a new attempt should use a new source. Schema:
 - problem_id: <id>
   pattern: <Pk>
   error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
