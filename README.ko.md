@@ -6,14 +6,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/OPTIMETA/PAIDEIA-Alt"><img height="30" src="https://img.shields.io/badge/Exam_Radar-OPTIMETA_Alt_plugin-333333?style=for-the-badge&labelColor=000000&color=333333" alt="Exam Radar — OPTIMETA Alt 플러그인"></a>
-</p>
-
-<p align="center">
-  <sub><em>강의는 <a href="https://github.com/OPTIMETA/PAIDEIA-Alt"><strong>Exam Radar</strong></a>(OPTIMETA의 Alt 플러그인)로 잡고, 공부는 Paideia로 합니다. Alt에 설치해 둘을 같이 쓰면 강의실에 앉아 있는 순간부터 시험 공부까지가 하나의 워크플로우로 이어집니다. 로드맵은 <code>/paideia:alt</code>로 곧장 흘려보내세요.</em></sub>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/github/license/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="라이선스">
   <img src="https://img.shields.io/github/stars/OPTIMETA/PAIDEIA?style=flat-square&logo=github&logoColor=white&labelColor=000000&color=333333&cacheSeconds=3600" alt="GitHub 스타 수">
   <img src="https://img.shields.io/github/last-commit/OPTIMETA/PAIDEIA?style=flat-square&labelColor=000000&color=333333&cacheSeconds=3600" alt="최근 커밋">
@@ -32,34 +24,26 @@
 </p>
 
 <p align="center">
-  <a href="https://news.hada.io/topic?id=29865">
-    <img height="34" src="https://img.shields.io/badge/GeekNews-%231%20on%2026.05.26-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews #1 on 26.05.26">
-  </a>
-  &nbsp;
-  <a href="https://news.hada.io/weekly/202622">
-    <img height="34" src="https://img.shields.io/badge/GeekNews%20Weekly-%23360-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews Weekly #360">
-  </a>
-  &nbsp;
-  <a href="https://www.producthunt.com/products/paideia">
-    <img height="34" src="https://img.shields.io/badge/Product%20Hunt-Launched-333333?style=for-the-badge&logo=producthunt&logoColor=white&labelColor=000000&color=333333" alt="Product Hunt launch">
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://www.taewoopark.com/projects/paideia">
-    <img height="34" src="https://img.shields.io/badge/Interactive%20Demo-Live-333333?style=for-the-badge&labelColor=000000&color=333333" alt="Interactive demo at taewoopark.com">
-  </a>
+  <a href="https://news.hada.io/topic?id=29865"><img height="34" src="https://img.shields.io/badge/GeekNews-%231%20on%2026.05.26-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews #1 on 26.05.26"></a><a href="https://news.hada.io/weekly/202622"><img height="34" src="https://img.shields.io/badge/GeekNews%20Weekly-%23360-333333?style=for-the-badge&labelColor=000000&color=333333" alt="GeekNews Weekly #360"></a><br>
+  <a href="https://www.producthunt.com/products/paideia"><img height="34" src="https://img.shields.io/badge/Product%20Hunt-Launched-333333?style=for-the-badge&logo=producthunt&logoColor=white&labelColor=000000&color=333333" alt="Product Hunt launch"></a><a href="https://www.taewoopark.com/projects/paideia"><img height="34" src="https://img.shields.io/badge/Interactive%20Demo-Live-333333?style=for-the-badge&labelColor=000000&color=333333" alt="Interactive demo at taewoopark.com"></a>
 </p>
 
 <p align="center">
   <a href="./README.md">English README</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/OPTIMETA/PAIDEIA-codex"><strong>PAIDEIA-codex</strong> — OpenAI Codex CLI 에디션</a>
+  <a href="https://taewoopark.com"><strong>taewoopark.com</strong> — 저자 사이트</a>
 </p>
 
-> **Claude Code 대신 OpenAI Codex CLI를 쓰시나요?** 같은 도구, 같은 디렉터리 구조, 같은 라이선스 — 2026-04-21에 Claude Code Pro 제한 보도로 잠깐 혼란이 돌던 시점에 Codex용 포팅이 진행됐습니다. Anthropic은 이후 "일부 신규 사용자 대상의 한정 테스트였을 뿐"이라고 정정했지만, 이 포트는 어느 쪽 CLI든 이미 결제 중인 환경에서 Paideia를 돌릴 수 있게 해 주는 CLI-중립 대안으로 그대로 쓸모가 있습니다 → **[PAIDEIA-codex](https://github.com/OPTIMETA/PAIDEIA-codex)**.
+<p align="center"><sub><strong>PAIDEIA 패밀리 — 하나의 학습 엔진, 모든 에이전트 런타임</strong></sub></p>
 
-> **보안 안내.** 이 저장소가 PAIDEIA의 원본 저장소입니다. PAIDEIA는 Claude Code 플러그인으로 설치되며, `.zip` 다운로드, `.exe` 실행, 별도 installer 설치를 요구하지 않습니다. 이 README에서 명시적으로 연결한 저장소가 아니라면, 같은 PAIDEIA 이름을 쓰는 다른 저장소는 이 프로젝트와 아무 관련이 없습니다.
+| 플랫폼 | 저장소 | 설명 |
+|:--:|:--|:--|
+| <a href="https://github.com/OPTIMETA/PAIDEIA"><img src="https://cdn.simpleicons.org/claude/D97757" height="24" alt="Claude"></a> | **[PAIDEIA](https://github.com/OPTIMETA/PAIDEIA)** | 원본 — **Claude Code** 플러그인. |
+| <a href="https://github.com/OPTIMETA/PAIDEIA-codex"><img src="https://upload.wikimedia.org/wikipedia/commons/e/ef/ChatGPT-Logo.svg" height="24" alt="OpenAI Codex"></a> | **[PAIDEIA-codex](https://github.com/OPTIMETA/PAIDEIA-codex)** | **OpenAI Codex** CLI 에디션. |
+| <a href="https://github.com/OPTIMETA/PAIDEIA-opencode"><img src="https://cdn.simpleicons.org/opencode/888888" height="24" alt="opencode"></a> | **[PAIDEIA-opencode](https://github.com/OPTIMETA/PAIDEIA-opencode)** | **opencode** 에디션. |
+| <a href="https://github.com/OPTIMETA/PAIDEIA-Hermes"><img src="https://github.com/hermes-agent.png" height="24" alt="hermes-agent"></a> | **[PAIDEIA-Hermes](https://github.com/OPTIMETA/PAIDEIA-Hermes)** | **hermes-agent** 플러그인. |
+| <a href="https://github.com/OPTIMETA/PAIDEIA-mcp"><img src="https://cdn.simpleicons.org/modelcontextprotocol/888888" height="24" alt="MCP"></a> | **[PAIDEIA-mcp](https://github.com/OPTIMETA/PAIDEIA-mcp)** | 독립형 로컬 **MCP** 서버 — Alt 로컬 모델에서 PAIDEIA 구동. |
+| <a href="https://github.com/OPTIMETA/PAIDEIA-Alt"><img src="https://github.com/altalt-org.png" height="24" alt="Alt · altalt.org"></a> | **[PAIDEIA-Alt](https://github.com/OPTIMETA/PAIDEIA-Alt)** | **Exam Radar** — Alt 강의 캡처 플러그인 ([altalt.org](https://altalt.org)). |
 
 <p align="center">
   <em>일반적인 학습 도구는 평균적인 실러버스를 가르칩니다. Paideia는 <strong>당신의</strong> 실러버스를 가르칩니다 —<br>
