@@ -24,14 +24,17 @@ Input (stdin, JSON, per Claude Code's statusline contract):
 """
 from __future__ import annotations
 
-import datetime
 import glob
 import hashlib
 import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paideia_lib as plib  # noqa: E402  (shared .course-meta / phase logic)
 
 NEON = [
     (57, 255, 20),     # neon green
@@ -49,10 +52,7 @@ NEON = [
 ]
 
 CACHE_DIR = Path.home() / ".cache" / "paideia"
-
-# Robust to schema drift: the canonical /grade entry uses `pattern:` but older
-# /blind entries may have used `pattern_missed_initial:`. Accept both.
-_PATTERN_RX = re.compile(r"\b(?:pattern|pattern_missed_initial)\s*:\s*(P\d+)")
+CACHE_TTL_S = 30 * 86400  # GC horizon: cache entries older than this are pruned
 
 
 def pick_color(seed: str) -> str:
@@ -61,85 +61,11 @@ def pick_color(seed: str) -> str:
     return f"\033[38;2;{r};{g};{b}m"
 
 
-def parse_meta(cwd: Path) -> dict[str, str]:
-    meta: dict[str, str] = {}
-    p = cwd / ".course-meta"
-    if not p.exists():
-        return meta
-    try:
-        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.match(r"^\s*([A-Z_][A-Z0-9_]*)\s*:\s*(.+?)\s*$", line)
-            if m:
-                # Strip a trailing `# comment` from every value so a hand-edited
-                # line like `COURSE_NAME: Complex Analysis  # main` doesn't leak
-                # the annotation into the statusline. Mirrors doctor.parse_meta
-                # and session_start.parse_meta — all three must agree.
-                meta[m.group(1)] = m.group(2).split("#", 1)[0].strip()
-    except OSError:
-        pass
-    return meta
-
-
-def days_until(exam_date: str) -> int | None:
-    try:
-        d = datetime.datetime.strptime(exam_date.strip(), "%Y-%m-%d").date()
-    except (ValueError, AttributeError):
-        return None
-    return (d - datetime.date.today()).days
-
-
-def _quiz_problems_exist(cwd: Path) -> bool:
-    """True iff at least one quiz PROBLEM file exists (excluding _answers siblings)."""
-    for p in glob.glob(str(cwd / "quizzes" / "*.md")):
-        if not p.endswith("_answers.md"):
-            return True
-    return False
-
-
-def _read_errors_log(cwd: Path) -> str:
-    log = cwd / "errors" / "log.md"
-    if not log.exists():
-        return ""
-    try:
-        return log.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return ""
-
-
-def _has_error_entries(log_text: str) -> bool:
-    return bool(re.search(r"^\s*-\s+problem_id\s*:", log_text, re.MULTILINE))
-
-
-def _mock_was_graded(log_text: str) -> bool:
-    """Did at least one grade write back a mock-sourced entry?"""
-    if re.search(r"^\s*source\s*:\s*(?:answers/converted/)?mock[/_]", log_text, re.MULTILINE):
-        return True
-    if re.search(r"^\s*problem_id\s*:\s*['\"]?mock[_\-]", log_text, re.MULTILINE):
-        return True
-    return False
-
-
-def detect_phase(cwd: Path, days: int | None) -> str:
-    if days == 0:
-        return "cool"
-    cheatsheet = cwd / "cheatsheet"
-    if (cheatsheet / "final.pdf").exists() or (cheatsheet / "final.md").exists():
-        return "cram"
-    log_text = _read_errors_log(cwd)
-    if _mock_was_graded(log_text):
-        return "mock"
-    if not (cwd / "course-index" / "patterns.md").exists():
-        return "setup"
-    if _quiz_problems_exist(cwd) and _has_error_entries(log_text):
-        return "drill"
-    return "diag"
-
-
 def top_miss(cwd: Path) -> str | None:
-    wms = sorted(glob.glob(str(cwd / "weakmap" / "weakmap_*.md")), reverse=True)
-    if wms:
+    wm = plib.latest_weakmap(cwd)
+    if wm:
         try:
-            text = Path(wms[0]).read_text(encoding="utf-8", errors="replace")
+            text = wm.read_text(encoding="utf-8", errors="replace")
         except OSError:
             text = ""
         # The statusline's "Pk ↑" is the user's single focus pattern, so it must
@@ -163,14 +89,7 @@ def top_miss(cwd: Path) -> str | None:
         # A weakmap whose top entries are all §/topic-based (no Pk headline) —
         # fall back to the most-frequent graded error pattern below, not to an
         # arbitrary first token, which would surface a low-priority pattern.
-    log_text = _read_errors_log(cwd)
-    if log_text:
-        counts: dict[str, int] = {}
-        for m in _PATTERN_RX.finditer(log_text):
-            counts[m.group(1)] = counts.get(m.group(1), 0) + 1
-        if counts:
-            return max(counts, key=counts.get)
-    return None
+    return plib.top_pattern(plib.read_errors_log(cwd))
 
 
 def fmt_days(days: int | None) -> str | None:
@@ -269,6 +188,20 @@ def _read_cache(cwd: Path, session: str) -> str | None:
         return None
 
 
+def _gc_cache(now: float) -> None:
+    """Prune cache entries past the TTL — sessions rotate constantly, and
+    without this the per-(cwd, session) files accumulate forever."""
+    try:
+        for f in CACHE_DIR.glob("*.json"):
+            try:
+                if now - f.stat().st_mtime > CACHE_TTL_S:
+                    f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 def _write_cache(cwd: Path, session: str, output: str) -> None:
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -277,17 +210,18 @@ def _write_cache(cwd: Path, session: str, output: str) -> None:
             json.dumps({"mtimes": _collect_mtimes(cwd), "output": output}),
             encoding="utf-8",
         )
+        _gc_cache(time.time())
     except OSError:
         pass
 
 
 def _render(cwd: Path, session: str) -> str:
-    meta = parse_meta(cwd)
+    meta = plib.parse_meta(cwd)
     if not meta:
         return ""
     name = truncate(meta.get("COURSE_NAME", "course"))
-    days = days_until(meta.get("EXAM_DATE", ""))
-    phase = detect_phase(cwd, days)
+    days = plib.days_until(meta.get("EXAM_DATE", ""))
+    phase = plib.phase(cwd, days)
     miss = top_miss(cwd)
 
     parts = ["paideia", name]

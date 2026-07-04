@@ -34,6 +34,9 @@ import sys
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paideia_lib as plib  # noqa: E402  (shared .course-meta parsing)
+
 OLLAMA_MODEL = "qwen3-vl:8b"
 DPI = 300
 MAX_IMG_WIDTH = 1200
@@ -79,37 +82,14 @@ def build_prompt(course: str | None = None, lang: str | None = None) -> str:
 
 
 def read_course_name(cwd: Path | None = None) -> str | None:
-    cwd = cwd or Path.cwd()
-    meta_path = cwd / ".course-meta"
-    if not meta_path.exists():
-        return None
-    try:
-        for line in meta_path.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.match(r"^\s*COURSE_NAME\s*:\s*(.+?)\s*$", line)
-            if m:
-                return m.group(1).strip() or None
-    except OSError:
-        pass
-    return None
+    meta = plib.parse_meta(cwd or Path.cwd())
+    return meta.get("COURSE_NAME") or None
 
 
 def read_interface_lang(cwd: Path | None = None) -> str:
-    cwd = cwd or Path.cwd()
-    meta_path = cwd / ".course-meta"
-    if not meta_path.exists():
-        return DEFAULT_LANG
-    try:
-        for line in meta_path.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.match(r"^\s*INTERFACE_LANG\s*:\s*(.+?)\s*$", line)
-            if m:
-                # Strip trailing `# comment` so an annotated line like
-                # `INTERFACE_LANG: ko # main course language` still parses.
-                v = m.group(1).split("#", 1)[0].strip().lower()
-                if v in _PROSE_RULE:
-                    return v
-    except OSError:
-        pass
-    return DEFAULT_LANG
+    meta = plib.parse_meta(cwd or Path.cwd())
+    lang = plib.interface_lang(meta)
+    return lang if lang in _PROSE_RULE else DEFAULT_LANG
 
 
 def image_to_b64(img) -> str:

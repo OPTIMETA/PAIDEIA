@@ -9,13 +9,12 @@ Silent (exit 0, no output) when CWD has no .course-meta. Wired by
 """
 from __future__ import annotations
 
-import datetime
-import glob
 import re
 import sys
 from pathlib import Path
 
-_PATTERN_RX = re.compile(r"\b(?:pattern|pattern_missed_initial)\s*:\s*(P\d+)")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paideia_lib as plib  # noqa: E402  (shared .course-meta / phase logic)
 
 # i18n: keyed by message id, each value is a {"en": ..., "ko": ...} dict.
 # `format()` placeholders are filled in by the caller.
@@ -34,6 +33,8 @@ _MSG: dict[str, dict[str, str]] = {
                     "ko": "  다음: /paideia:cheatsheet --pdf 로 요약 시작"},
     "next_cram":   {"en": "  next: re-read /paideia:weakmap; don't learn anything new",
                     "ko": "  다음: /paideia:weakmap 재열람, 새로운 건 배우지 말 것"},
+    "next_cool":   {"en": "  exam is today - top 3 of the weakmap only; learn nothing new",
+                    "ko": "  시험 당일 - weakmap 상위 3개만 재확인, 새 학습 금지"},
 }
 
 
@@ -49,87 +50,18 @@ def t(key: str, lang: str, **kw: object) -> str:
     return template.format(**kw) if kw else template
 
 
-def parse_meta(cwd: Path) -> dict[str, str]:
-    meta: dict[str, str] = {}
-    p = cwd / ".course-meta"
-    if not p.exists():
-        return meta
-    try:
-        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.match(r"^\s*([A-Z_][A-Z0-9_]*)\s*:\s*(.+?)\s*$", line)
-            if m:
-                # Strip a trailing `# comment` from every value so a hand-edited
-                # line like `COURSE_NAME: Complex Analysis  # main` doesn't leak
-                # the annotation into the SessionStart banner. Mirrors
-                # doctor.parse_meta — all three parsers must agree.
-                meta[m.group(1)] = m.group(2).split("#", 1)[0].strip()
-    except OSError:
-        pass
-    return meta
-
-
-def days_until(exam_date: str) -> int | None:
-    try:
-        d = datetime.datetime.strptime(exam_date.strip(), "%Y-%m-%d").date()
-    except (ValueError, AttributeError):
-        return None
-    return (d - datetime.date.today()).days
-
-
 def latest_weakmap_verdict(cwd: Path) -> str | None:
-    wms = sorted(glob.glob(str(cwd / "weakmap" / "weakmap_*.md")), reverse=True)
-    if not wms:
+    wm = plib.latest_weakmap(cwd)
+    if wm is None:
         return None
     try:
-        text = Path(wms[0]).read_text(encoding="utf-8", errors="replace")
+        text = wm.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
     m = re.search(r"##\s*One-line verdict\s*\n+\s*(.+?)(?:\n|$)", text)
     if m:
         return m.group(1).strip()
     return None
-
-
-def top_pattern_from_errors(cwd: Path) -> str | None:
-    log = cwd / "errors" / "log.md"
-    if not log.exists():
-        return None
-    try:
-        text = log.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    counts: dict[str, int] = {}
-    for m in _PATTERN_RX.finditer(text):
-        counts[m.group(1)] = counts.get(m.group(1), 0) + 1
-    if not counts:
-        return None
-    return max(counts, key=counts.get)
-
-
-def current_phase(cwd: Path) -> str:
-    cheat = cwd / "cheatsheet"
-    if (cheat / "final.pdf").exists() or (cheat / "final.md").exists():
-        return "cram"
-    log = cwd / "errors" / "log.md"
-    if log.exists():
-        try:
-            text = log.read_text(encoding="utf-8", errors="replace")
-            if re.search(r"^\s*source\s*:\s*(?:answers/converted/)?mock[/_]", text, re.MULTILINE):
-                return "mock"
-        except OSError:
-            pass
-    if not (cwd / "course-index" / "patterns.md").exists():
-        return "setup"
-    has_quiz = any(
-        not p.endswith("_answers.md") for p in glob.glob(str(cwd / "quizzes" / "*.md"))
-    )
-    if has_quiz and log.exists():
-        try:
-            if re.search(r"^\s*-\s+problem_id\s*:", log.read_text(errors="replace"), re.MULTILINE):
-                return "drill"
-        except OSError:
-            pass
-    return "diag"
 
 
 def format_d(days: int | None, lang: str) -> str:
@@ -144,22 +76,18 @@ def format_d(days: int | None, lang: str) -> str:
 
 def main() -> int:
     cwd = Path.cwd()
-    meta = parse_meta(cwd)
+    meta = plib.parse_meta(cwd)
     if not meta:
         return 0
 
     name = meta.get("COURSE_NAME", "course")
-    # Strip trailing `# comment` so an annotated INTERFACE_LANG line still parses
-    # (e.g., `INTERFACE_LANG: ko # main course language`). The generic
-    # parse_meta() regex would otherwise capture the comment verbatim and the
-    # membership check below would silently fall back to en.
-    lang = meta.get("INTERFACE_LANG", "en").split("#", 1)[0].strip().lower()
-    if lang not in {"en", "ko"}:
-        lang = "en"
-    days = days_until(meta.get("EXAM_DATE", ""))
-    phase = current_phase(cwd)
+    lang = plib.interface_lang(meta)
+    days = plib.days_until(meta.get("EXAM_DATE", ""))
+    # Same phase machine as the statusline (plib.phase), so the banner and the
+    # status bar can never disagree — including `cool` on exam day.
+    phase = plib.phase(cwd, days)
     verdict = latest_weakmap_verdict(cwd)
-    top_miss = top_pattern_from_errors(cwd)
+    top_miss = plib.top_pattern(plib.read_errors_log(cwd))
 
     lines = [f"[paideia] {name}{format_d(days, lang)} · phase={phase}"]
 
@@ -174,6 +102,7 @@ def main() -> int:
             "drill": "next_drill",
             "mock":  "next_mock",
             "cram":  "next_cram",
+            "cool":  "next_cool",
         }.get(phase)
         if phase_key:
             lines.append(t(phase_key, lang))

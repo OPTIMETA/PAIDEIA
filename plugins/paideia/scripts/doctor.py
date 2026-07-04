@@ -43,6 +43,9 @@ import sys
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paideia_lib as plib  # noqa: E402  (shared .course-meta parsing)
+
 OLLAMA_MODEL = "qwen3-vl:8b"
 
 # Python deps, graded by what actually needs them. The old flat REQUIRED_PY
@@ -70,8 +73,8 @@ META_KEYS = [
     "COURSE_NAME", "EXAM_DATE", "EXAM_TYPE", "USER_WEAK_ZONES", "OCR_ENGINE", "INTERFACE_LANG",
 ]
 
-VALID_ENGINES = {"claude", "ollama", "tesseract"}
-VALID_LANGS = {"en", "ko"}
+VALID_ENGINES = plib.VALID_ENGINES
+VALID_LANGS = plib.VALID_LANGS
 
 # Writable paths that downstream commands depend on (only the ones that should
 # already exist; `--fix` creates the rest, then this re-checks).
@@ -163,23 +166,10 @@ def install_hint(macos: str, ubuntu: str) -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# .course-meta parsing (mirrors session_start.parse_meta)
+# .course-meta parsing — single source of truth in paideia_lib
 # --------------------------------------------------------------------------- #
 
-def parse_meta(cwd: Path) -> dict[str, str]:
-    meta: dict[str, str] = {}
-    p = cwd / ".course-meta"
-    if not p.exists():
-        return meta
-    try:
-        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.match(r"^\s*([A-Z_][A-Z0-9_]*)\s*:\s*(.+?)\s*$", line)
-            if m:
-                # strip trailing "# comment" the way session_start does for lang
-                meta[m.group(1)] = m.group(2).split("#", 1)[0].strip()
-    except OSError:
-        pass
-    return meta
+parse_meta = plib.parse_meta
 
 
 def engine_of(meta: dict[str, str]) -> str | None:
