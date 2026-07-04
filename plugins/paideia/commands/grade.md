@@ -95,7 +95,11 @@ Follow the answer-processing skill pipeline:
 
 3. **Identify reference solution.** Based on the answer filename stem:
    - `hw3.pdf` → `converted/solutions/hw3_sol.md` (or `converted/solutions/hw3.md`)
-   - `diagnostic.pdf` → `quizzes/diagnostic_answers.md`
+   - `diagnostic*.pdf` (e.g. `diagnostic.pdf`, `diagnostic_<ts>.pdf`) →
+     `quizzes/diagnostic_<ts>_answers.md` — exact `<ts>` match first; otherwise
+     fall back to the most recent `quizzes/diagnostic_*_answers.md` (scans get
+     renamed by phone apps, so like mock/chain the fallback is the common path;
+     `/paideia:quiz all` saves under the `diagnostic` stem for exactly this rule)
    - `mock_<ts>.pdf` (or `exam_<ts>.pdf`) → `mock/exam_<ts>_sol.md`. The scan is
      usually timestamped later than the exam, so the `<ts>` rarely matches —
      if there is no exact match, fall back to the most recent `mock/exam_*_sol.md`.

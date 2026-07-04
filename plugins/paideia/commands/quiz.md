@@ -24,7 +24,7 @@ Procedure:
    - Skip step 1 below. Continue from step 2 with this weakness-driven mix.
 
 1. **Resolve topic.** Map the argument to a specific set of sections and patterns via `coverage.md` and `patterns.md`. If ambiguous, ask the user to pick.
-   - **Special case `all`.** When the user passes `all` (broad diagnostic), weight section selection by HW density: draw ~70% of problems from 🔥🔥 Exam-primary sections, ~25% from 🔥 Exam-likely, ≤5% from 🟡, 0% from ⚪. Never sample ⚪ low-risk sections unless the user explicitly names them — the professor's HW already signaled what's off the exam.
+   - **Special case `all`.** When the user passes `all` (broad diagnostic), weight section selection by HW density: draw ~70% of problems from 🔥🔥 Exam-primary sections, ~25% from 🔥 Exam-likely, ≤5% from 🟡, 0% from ⚪. Never sample ⚪ low-risk sections unless the user explicitly names them — the professor's HW already signaled what's off the exam. **Filename stem override: `diagnostic`, not `all`** — save to `quizzes/diagnostic_<ts>.md` (+ `_answers.md`) and print the upload name `answers/diagnostic_<ts>.pdf`, so `/grade`'s `diagnostic*` resolution rule matches whatever the user's scanner names the file.
    - **Specific § or topic.** If the user names a ⚪ low-risk section, comply but warn once (in $INTERFACE_LANG): "No HW touched this §, so exam probability is low. Still want to drill it?"
 
 2. **Design the problem mix** (N problems):

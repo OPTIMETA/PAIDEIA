@@ -21,7 +21,9 @@ HW density stays the primary exam-tier signal. Lecture emphasis is layered on as
 
 1. If `$ARGUMENTS` contains the export (look for `<!-- exam-radar:v1`), use it.
 2. Else if `materials/radar.md` exists, read that.
-3. Else: tell the user — "Exam Radar에서 **학습 로드맵 → 복사** 후 `/paideia:alt` 뒤에 붙여넣거나, `materials/radar.md`로 저장하세요." — then stop.
+3. Else: tell the user (in `$INTERFACE_LANG`) and stop:
+   - `en`: "In Exam Radar, use **학습 로드맵 → 복사** (Study roadmap → Copy), then paste it after `/paideia:alt` — or save it as `materials/radar.md`."
+   - `ko`: "Exam Radar에서 **학습 로드맵 → 복사** 후 `/paideia:alt` 뒤에 붙여넣거나, `materials/radar.md`로 저장하세요."
 4. Validate the marker. No `<!-- exam-radar:v1` → not an Exam Radar export; stop. Version `> 1` → warn that this command parses v1 and may ignore new fields, then proceed best-effort.
 
 ## Pipeline
@@ -41,7 +43,27 @@ Follow `skills/alt-import/SKILL.md` end to end:
 
 ## Chat output
 
-Print, prose in `INTERFACE_LANG`, identifiers verbatim:
+Print the block matching `INTERFACE_LANG` (identifiers, paths, and slash commands verbatim in both):
+
+**If `INTERFACE_LANG=en`:**
+
+```
+Exam Radar imported (<course>, <D-N>).
+
+- course-index/radar.md     ← <N> topics (gold <G> · already-solid <S> · safe-to-drop <D>)
+- course-index/coverage.md  ← Lecture emphasis column added, <X> divergences
+- weakmap/weakmap_<ts>.md   ← <G> gold-zone topics registered as weaknesses
+
+Divergences (lecture vs HW):
+  🎙 stressed in lecture, no HW:   <§/topics …>   ← possible verbal-only exam point; judge it
+  HW-dense but quiet in lecture:  <§ …>          ← quietly important
+
+Next:
+  /paideia:weakmap         — merged weakness priority
+  /paideia:quiz <gold §>   — drill the gold zone first
+```
+
+**If `INTERFACE_LANG=ko`:**
 
 ```
 Exam Radar 반영 완료 (<course>, <D-N>).
