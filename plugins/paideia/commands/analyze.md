@@ -5,7 +5,7 @@ argument-hint: "[optional weak-zone topics to emphasize, comma-separated]"
 
 ## Output language
 
-Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output and narrative parts of the generated index MDs — must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs (P1..Pk), tier markers (🔥🔥/🔥/🟡/⚪, ✅✅/✅/🟡/🔴/🔴🔴), § / Ch section anchors, and table column headers (`Problem`, `Primary §`, `Secondary §`, `Patterns`, `HW coverage`, `Exam tier`, etc.) — `weakmap`, `hwmap`, and `quiz` regex on them.
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output and narrative parts of the generated index MDs — must be in that language. Keep in English regardless: file paths, slash command names, pattern IDs (P1..Pk), tier markers (🔥🔥/🔥/🟡/⚪) and the `⚠weak` flag, § / Ch section anchors, and table column headers (`Problem`, `Primary §`, `Secondary §`, `Patterns`, `HW coverage`, `Exam tier`, etc.) — `weakmap`, `hwmap`, and `quiz` regex on them.
 
 Load `skills/course-builder/SKILL.md`.
 
@@ -45,14 +45,15 @@ A pattern must appear in ≥2 distinct problems to qualify. Otherwise note it as
 
 Build forward map (problem → §) and reverse map (§ → problems).
 
-For the reverse map, assign strength:
-- ✅✅ Strong (3+ instances)
-- ✅ Covered (2 instances)
-- 🟡 Thin (1 instance)
-- 🔴 Blind (0 instances)
-- 🔴🔴 Critical Blind (0 instances AND in user's declared weak zone from `$ARGUMENTS`)
+For the reverse map, assign the **exam tier from HW density** — the single canonical vocabulary from `skills/course-builder/SKILL.md`, which `hwmap`, `weakmap`, and `alt` regex on (do NOT emit ✅/🔴 "coverage strength" markers; that vocabulary is retired):
+- 🔥🔥 Exam-primary (3+ HW instances)
+- 🔥 Exam-likely (2 instances)
+- 🟡 Exam-possible (1 instance)
+- ⚪ Low-risk (0 instances — reference only)
 
-End the file with a "Recommended drill priority" section ranking the top 6 items by `(weakness × exam-probability × no-coverage)` heuristic.
+Flag any section that falls in the user's declared weak zones (from `$ARGUMENTS`) with a trailing ` ⚠weak` after its tier (e.g. `⚪ Low-risk ⚠weak`). The flag never upgrades the tier — it only feeds drill-priority ranking.
+
+End the file with a "Recommended drill priority" section ranking the top 6 items by HW density first, `⚠weak` as the tie-breaker within a tier.
 
 ## Step 4: Print summary
 
@@ -65,15 +66,15 @@ course-index/ generated.
 
 - summary.md:  <X> sections, <Y> subsections
 - patterns.md: <N> recurring patterns (P1..P<N>), <M> one-off techniques
-- coverage.md: <A> strongly covered, <B> thin, <C> blind, <D> CRITICAL blind
+- coverage.md: <A> 🔥🔥 exam-primary, <B> 🔥 exam-likely, <C> 🟡, <D> ⚪ (+<W> ⚠weak flags)
 
-Top 3 blind spots:
-  1. <§X> — <title>  [recommend: /derive <key-concept>]
-  2. <§Y> — <title>  [recommend: /quiz <§Y>]
-  3. <§Z> — <title>  [recommend: /derive <key-concept>]
+Top 3 drill targets (HW-dense first, ⚠weak breaks ties):
+  1. <§X> — <title>  [recommend: /blind <hw-id>]
+  2. <§Y> — <title>  [recommend: /quiz <§Y> 3]
+  3. <§Z> — <title>  [recommend: /twin <hw-id>]
 
 Next steps:
-  /hwmap blind        — review all blind spots
+  /hwmap hot          — full exam-tier map with drill anchors per §
   /pattern §<weak-§>  — pattern cards for the weak section
   /blind <hw-id>      — drill the HW closest to the weakness
 ```

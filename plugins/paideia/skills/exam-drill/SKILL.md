@@ -1,6 +1,6 @@
 ---
 name: exam-drill
-description: Use when the user wants exam-focused drilling from the course's analyzed material. Generates twin variants of known problems (`/twin`), runs strategy-level blind drills on known problems (`/blind`), creates integration problems chaining multiple patterns (`/chain`), surfaces pattern cards (`/pattern`), and shows coverage/blind-spot maps (`/hwmap`). Reads from `course-index/patterns.md`, `course-index/coverage.md`, and `converted/solutions/*.md`. Works for any math/physics course that has been ingested and analyzed.
+description: Use when the user wants exam-focused drilling from the course's analyzed material. Generates twin variants of known problems (`/twin`), runs strategy-level blind drills on known problems (`/blind`), creates integration problems chaining multiple patterns (`/chain`), surfaces pattern cards (`/pattern`), and shows coverage/exam-tier maps (`/hwmap`). Reads from `course-index/patterns.md`, `course-index/coverage.md`, and `converted/solutions/*.md`. Works for any math/physics course that has been ingested and analyzed.
 ---
 
 # Exam Drill
@@ -33,7 +33,7 @@ This skill assumes `/ingest` and `/analyze` have been run. If `course-index/patt
 ## Files read
 
 - `course-index/patterns.md` — recognition cards P1, P2, ...
-- `course-index/coverage.md` — HW↔§ map, blind spots
+- `course-index/coverage.md` — HW↔§ map, 🔥 exam tiers + ⚠weak flags
 - `course-index/summary.md` — topic tree
 - `converted/homework/*.md` — original HW problems
 - `converted/solutions/*.md` — HW solutions (ground truth for grading)
@@ -79,16 +79,16 @@ printed upload name.)
 
 1. Pick N patterns from different source problems (per `course-index/coverage.md`).
 2. Design a problem that requires composing them sequentially in parts (a), (b), (c).
-3. Bias toward user's weak zone (see `course-index/coverage.md` Critical column).
+3. Bias toward user's weak zone (sections flagged `⚠weak` in `course-index/coverage.md`, or the latest weakmap's top entries).
 4. Save problem and solution; prompt for part-by-part strategy or PDF upload.
 
 ### `/pattern [§ or keyword or "all"]`
 
 Read-only. Filter `course-index/patterns.md` by the query and return compact pattern cards.
 
-### `/hwmap [§ or "blind"]`
+### `/hwmap [§ | "hot" | "all"]`
 
-Read-only. Project `course-index/coverage.md` by the query. `blind` lists all 🔴 and 🔴🔴 entries with drill recommendations.
+Read-only. Project `course-index/coverage.md` by the query. `hot` ranks 🔥🔥/🔥 sections by HW density with their HW drill anchors and a per-§ recommendation (`blind` is accepted only as a legacy alias for `hot` — there is no blind-spot listing mode; ⚪ no-HW sections are low-risk by design).
 
 ## Twin recipe (invariance rules)
 

@@ -15,8 +15,8 @@ Procedure:
 
 1. **Select N patterns** with constraints:
    - From ≥ N different source problems (span HW/example origins; don't pick 2 patterns both from HW1)
-   - At least one pattern from the user's weak zone (per `coverage.md` Critical column)
-   - At least one pattern marked ✅✅ Strong (user has machinery)
+   - At least one pattern from the user's weak zone (sections flagged `⚠weak` in `coverage.md`, or the latest weakmap's top entries)
+   - At least one pattern from a 🔥🔥 Exam-primary section with no recent entry in `errors/log.md` (user has machinery)
    - Patterns must be composable (pattern A's output = pattern B's input)
 
 2. **Design the problem** as a multi-part question:

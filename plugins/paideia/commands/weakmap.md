@@ -27,7 +27,7 @@ Use when the user notices "I think I'm weak at this point" while studying — th
 
 1. Read `errors/log.md`. Group YAML entries by `pattern`.
 2. **Within each pattern, keep only the entry with the most recent `date`.** Older errors may have already been corrected, so "current weakness snapshot" = latest only.
-3. Cross-reference with the blind-spot list in `course-index/coverage.md`.
+3. Cross-reference with `course-index/coverage.md`'s reverse map — the 🔥 exam tiers and any `⚠weak` flags.
 4. (If present) the prior weakmap's "User-declared weaknesses" section is **not** re-included. A no-argument call is an error-log-driven re-snapshot, so user-declared stays empty in this mode.
 5. Write to `weakmap/weakmap_<ts>.md` in the format below and print a chat summary.
 

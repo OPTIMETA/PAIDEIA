@@ -17,7 +17,7 @@ Procedure:
    - Top 5 patterns by frequency of appearance (from `patterns.md`)
    - All formulas boxed in `derivations/*.md` (final results)
    - User's most-frequent error types (from `errors/log.md`) — with the correction, not the error
-   - 🔴 blind-spot sections with one key formula each
+   - ⚪ no-HW sections (and any `⚠weak`-flagged §) with one key formula each — never drilled, so reference-grade only
 
 2. **Structure the cheatsheet** (target: fits on 1 page @ 10pt):
 
@@ -39,8 +39,8 @@ Procedure:
    - <correction 2>
    ...max 5
 
-   ## Blind-spot formulas (memorize these — no HW drilled them)
-   <one formula per blind-spot section, boxed>
+   ## No-HW formulas (memorize these — ⚪ sections no HW drilled)
+   <one formula per ⚪ section, boxed>
    ```
 
 3. **Write to** `cheatsheet/final.md`.

@@ -1,6 +1,6 @@
 ---
 name: course-builder
-description: Use whenever the user wants to ingest a new course's materials (lecture notes, textbook chapters, HW problems, HW solutions) and build the course-specific knowledge base — patterns.md (recurring solution techniques), coverage.md (HW-to-section map with blind spots), and summary.md (topic tree). Invoked by `/ingest` and `/analyze` slash commands. Designed to be domain-general across math and physics courses (calculus, linear algebra, real/complex analysis, classical mechanics, E&M, thermodynamics, quantum, etc.).
+description: Use whenever the user wants to ingest a new course's materials (lecture notes, textbook chapters, HW problems, HW solutions) and build the course-specific knowledge base — patterns.md (recurring solution techniques), coverage.md (HW-to-section map with 🔥 exam tiers + ⚠weak flags), and summary.md (topic tree). Invoked by `/ingest` and `/analyze` slash commands. Designed to be domain-general across math and physics courses (calculus, linear algebra, real/complex analysis, classical mechanics, E&M, thermodynamics, quantum, etc.).
 ---
 
 # Course Builder
@@ -147,7 +147,11 @@ Exam tiers (based on HW problem count targeting the section):
 - 🔥🔥 **Exam-primary** — 3+ HW instances. Highest exam probability. Drill hardest.
 - 🔥 **Exam-likely** — 2 HW instances. High exam probability.
 - 🟡 **Exam-possible** — 1 HW instance. Moderate probability; warm-pass review.
-- ⚪ **Low-risk** — no HW coverage. Treat as reference; do not spend drill time here unless the user explicitly asks. (Optional asterisk if it falls in a user-declared weak zone — but do not upgrade the exam tier on that basis alone.)
+- ⚪ **Low-risk** — no HW coverage. Treat as reference; do not spend drill time here unless the user explicitly asks.
+
+A section in the user's declared weak zones gets a trailing ` ⚠weak` flag after its tier (e.g. `⚪ Low-risk ⚠weak`). The flag never upgrades the tier — it is a drill-priority tie-breaker only.
+
+**This 🔥/⚪ + ⚠weak vocabulary is the only one.** Earlier drafts used ✅✅/✅/🟡/🔴/🔴🔴 "coverage strength" markers in `coverage.md`; that scheme is retired — `hwmap`, `weakmap`, `chain`, and `alt` regex on the 🔥 tiers and would not see 🔴 rows.
 
 **Do not invert this.** Sections with no HW are NOT "blind spots that the exam will bite" — they are sections the professor chose not to test, by omission. Drilling them steals time from exam-primary sections.
 
@@ -187,7 +191,7 @@ converted/                    ← all PDFs as MD
 course-index/
 ├── summary.md               ← topic tree
 ├── patterns.md              ← P1..Pk recognition cards
-└── coverage.md              ← HW↔§ map, blind spots flagged
+└── coverage.md              ← HW↔§ map, 🔥 exam tiers + ⚠weak flags
 ```
 
 All downstream commands (`/twin`, `/blind`, `/chain`, `/pattern`, `/hwmap`) read from these three index files, not from the raw materials. This makes re-analysis cheap (edit index manually if needed) and keeps commands domain-agnostic.
