@@ -17,7 +17,10 @@ Usage:
     python scripts/vision_ocr.py --engine=tesseract <input.pdf> <output.md>
     python scripts/vision_ocr.py --engine=ollama \\
         --course-name="Quantum Mechanics" --lang=en <input.pdf> <output.md>
+    python scripts/vision_ocr.py --engine=ollama --model=qwen3-vl:235b-cloud \\
+        <input.pdf> <output.md>
 
+`--model` (or env `OLLAMA_VISION_MODEL`) overrides the ollama vision model.
 `--course-name` overrides the course inferred from `.course-meta` in CWD.
 `--lang` overrides the `INTERFACE_LANG` field in `.course-meta` (en|ko).
 If neither is provided, the prompt defaults to a generic "math / physics"
@@ -29,6 +32,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -37,7 +41,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paideia_lib as plib  # noqa: E402  (shared .course-meta parsing)
 
-OLLAMA_MODEL = "qwen3-vl:8b"
+# Vision model for the ollama engine. Overridable per call (--model=) or per
+# environment (OLLAMA_VISION_MODEL) so hosts like OPTIMETA-OS can route OCR to
+# ollama-cloud vision models (e.g. qwen3-vl:235b-cloud) without editing this
+# script. Default stays the local 8B — works offline, no account needed.
+OLLAMA_MODEL = os.environ.get("OLLAMA_VISION_MODEL", "qwen3-vl:8b")
 DPI = 300
 MAX_IMG_WIDTH = 1200
 PER_PAGE_TIMEOUT = 1800
@@ -275,6 +283,7 @@ def ocr_pdf(
 
 
 def _parse_args(argv: list[str]) -> tuple[str, Path, Path, str | None, str | None]:
+    global OLLAMA_MODEL
     engine = "ollama"
     course_name: str | None = None
     lang: str | None = None
@@ -282,6 +291,10 @@ def _parse_args(argv: list[str]) -> tuple[str, Path, Path, str | None, str | Non
     for arg in argv[1:]:
         if arg.startswith("--engine="):
             engine = arg.split("=", 1)[1].strip().lower()
+        elif arg.startswith("--model="):
+            raw = arg.split("=", 1)[1].strip()
+            if raw:
+                OLLAMA_MODEL = raw
         elif arg.startswith("--course-name="):
             raw = arg.split("=", 1)[1].strip()
             course_name = raw or None
@@ -305,7 +318,8 @@ def _parse_args(argv: list[str]) -> tuple[str, Path, Path, str | None, str | Non
     if len(positional) != 2:
         print(
             "usage: python scripts/vision_ocr.py [--engine=ollama|tesseract] "
-            "[--course-name=<name>] [--lang=en|ko] <input.pdf> <output.md>",
+            "[--model=<ollama-vision-model>] [--course-name=<name>] [--lang=en|ko] "
+            "<input.pdf> <output.md>",
             file=sys.stderr,
         )
         sys.exit(2)
