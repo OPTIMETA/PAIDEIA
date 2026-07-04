@@ -50,8 +50,10 @@ for pdf_path in pdfs_to_convert:
     cat, stem = pdf_path.parent.name, pdf_path.stem
     out = Path(f"converted/{cat}/_pages/{stem}")
     out.mkdir(parents=True, exist_ok=True)
+    # 3-digit padding: with p{i:02d}, "p100" sorts before "p99" and a 100+
+    # page PDF gets read out of order by the agent.
     for i, im in enumerate(convert_from_path(str(pdf_path), dpi=160), 1):
-        im.save(out / f"p{i:02d}.png", "PNG", optimize=True)
+        im.save(out / f"p{i:03d}.png", "PNG", optimize=True)
 ```
 
 `dpi=160` is the sweet spot: math stays legible, file sizes stay reasonable.
@@ -75,7 +77,15 @@ for png in Path("converted").rglob("_pages/**/*.png"):
 
 ### Step 5 — Spawn one `general-purpose` agent per PDF, in parallel, backgrounded
 
-Each agent touches only its own file's `_pages/<stem>/` directory, so writes don't race. Use this prompt template (fill in the bracketed values):
+Each agent touches only its own file's `_pages/<stem>/` directory, so writes don't race.
+
+**Large PDFs — chunk before spawning (hard cap: 30 pages per agent).** An agent must hold every page image it read *and* its entire transcription in context until the final write, so a single 100–300-page textbook PDF overflows one agent long before the last page. If `_pages/<stem>/` holds more than 30 PNGs:
+
+1. Split into consecutive ranges of ≤30 pages (`p001–p030`, `p031–p060`, …).
+2. Spawn one agent per range (same prompt template; adjust the Input line to the range's files and set Output to `converted/<cat>/<stem>.part01.md`, `.part02.md`, … — no `<!-- SOURCE -->` header inside parts). Tell each agent its **absolute** page numbers so `### Page N` anchors stay continuous across parts.
+3. After all parts finish, concatenate them in order into `converted/<cat>/<stem>.md` with the single `<!-- SOURCE -->` header on top, then delete the `.partNN.md` files.
+
+At ≤30 pages, one agent per file as before. Use this prompt template (fill in the bracketed values):
 
 ```
 You are an OCR / document-conversion tool transcribing a <domain> PDF
@@ -96,9 +106,10 @@ pdfplumber is unreliable on course materials (it splits equations
 across lines and interleaves columns), so we render each page and
 read it visually.
 
-Input: page images at <abs_path>/_pages/<stem>/p01.png through pNN.png
-       (NN pages). Images are ≤1800 px on the long edge.
-Output: overwrite <abs_path>/<stem>.md
+Input: page images at <abs_path>/_pages/<stem>/p001.png through pNNN.png
+       (NN pages; for a chunked run, only this agent's range). Images are
+       ≤1800 px on the long edge.
+Output: overwrite <abs_path>/<stem>.md (or <stem>.partNN.md for a chunk)
 
 Procedure:
 1. Read each page image with the Read tool — one at a time, not in
