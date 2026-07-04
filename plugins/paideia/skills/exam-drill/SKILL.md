@@ -112,18 +112,21 @@ Read-only. Project `course-index/coverage.md` by the query. `blind` lists all �
 
 ## Error logging schema
 
-When any drill reveals an error, append to `errors/log.md`:
+When any drill reveals an error, write to `errors/log.md` **through the
+deterministic writer** — one call per graded source, entries as stdin:
 
-```yaml
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/log_tool.py" append --source=<source> <<'YAML'
 - problem_id: <HW#-P#, twin-id, or chain-ts>
   pattern: <Pk from patterns.md>
   error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
   summary: "<one-line description>"
   source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
   date: <ISO8601>
+YAML
 ```
 
-This is the **same canonical schema** as `skills/answer-processing/SKILL.md` Step 6 — keep every key, including `source:` (the statusline's mock-phase detection regexes on it). `/weakmap` (top-level command) consumes this log; this skill just produces entries.
+This is the **same canonical schema** as `skills/answer-processing/SKILL.md` Step 6 — keep every key, including `source:` (the statusline's mock-phase detection regexes on it, and it doubles as the `--source=` idempotence key: re-grading a source replaces its entries instead of piling up duplicates). The tool schema-validates and writes atomically; never hand-edit the log's appended entries. `/weakmap` (top-level command) consumes this log; this skill just produces entries.
 
 ## Cross-skill coordination
 

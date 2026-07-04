@@ -123,7 +123,9 @@ mkdir -p materials/{lectures,textbook,homework,solutions} \
          course-index quizzes mock twins chain derivations cheatsheet weakmap \
          answers/converted errors
 
-# Seed errors/log.md if missing (append-only log; /grade and /weakmap depend on it)
+# Seed errors/log.md if missing (append-only log; /grade and /weakmap depend on it).
+# This text must stay identical to paideia_lib.ERRORS_LOG_SEED (doctor --fix and
+# log_tool.py restore/extend the same seed).
 [ -f errors/log.md ] || cat > errors/log.md <<'EOF'
 # Error log
 
@@ -134,6 +136,7 @@ mkdir -p materials/{lectures,textbook,homework,solutions} \
   summary: "<1 line>"
   source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
   date: <ISO8601>
+Write entries via scripts/log_tool.py (idempotent per source) — do not hand-edit appends.
 -->
 EOF
 ```

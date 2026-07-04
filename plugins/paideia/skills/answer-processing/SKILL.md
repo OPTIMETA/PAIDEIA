@@ -84,8 +84,6 @@ For each problem/part, produce a verdict:
 
 **Canonical `errors/log.md` schema — single source of truth.** Every command that appends here (`/grade`, `/blind`, future drills) MUST use exactly these keys. Downstream readers (`statusline.py`, `weakmap`, `session_start.py`) pattern-match on `pattern:` and `problem_id:` lines; any drift silently hides entries.
 
-For each non-✅ entry, append to `errors/log.md`:
-
 ```yaml
 - problem_id: <id>
   pattern: <Pk>
@@ -95,16 +93,36 @@ For each non-✅ entry, append to `errors/log.md`:
   date: <ISO>
 ```
 
-**Idempotent by `source:` — replace, don't pile up.** Re-grading the same
-answer (fix the OCR, re-run `/grade`) or re-running `/blind` on the same
-problem must NOT leave two copies of that attempt's errors in the log — the
-`weakmap` histogram would then double-count and over-rank those patterns.
-Before appending this grading's entries, **delete every existing list item
-whose `source:` equals the current source** (the same answer file / `blind/<id>`
-/ `chain/<ts>` you're about to write), then append the fresh block. The log
-stays a record of the *latest* grading of each source, not a transcript of every
-re-grade. (A genuinely new attempt belongs under a new `source:` — a new upload
-gets a new filename, so this only collapses true re-grades of the same file.)
+**Write through `log_tool.py` — never hand-edit the log.** Build the YAML
+block for every non-✅ entry of this grading, then make ONE call:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/log_tool.py" append \
+  --source="answers/converted/<name>.md" <<'YAML'
+- problem_id: <id>
+  pattern: <Pk>
+  error_type: <type>
+  summary: "<1 line>"
+  source: answers/converted/<name>.md
+  date: <ISO>
+YAML
+```
+
+The tool schema-validates every entry (keys, `error_type` values, date shape,
+`source:` equal to `--source`) and rejects the whole batch on any violation —
+fix the block and re-run rather than writing around it.
+
+**Why the tool exists — idempotent by `source:`, replace don't pile up.**
+Re-grading the same answer (fix the OCR, re-run `/grade`) or re-running
+`/blind` on the same problem must NOT leave two copies of that attempt's
+errors in the log — the `weakmap` histogram would then double-count and
+over-rank those patterns. `log_tool.py append` deletes every existing entry
+whose `source:` equals `--source` before appending, atomically, so the log
+stays a record of the *latest* grading of each source, not a transcript of
+every re-grade. (A genuinely new attempt belongs under a new `source:` — a
+new upload gets a new filename, so this only collapses true re-grades of the
+same file.) If a grading produced zero errors on a re-grade, run
+`log_tool.py remove --source=<source>` so the stale entries clear.
 
 ### Step 7: Render grade summary (chat output)
 

@@ -47,12 +47,15 @@ Procedure:
      - Did they identify all N patterns?
      - Did they use them in the correct order?
      - Does the final synthesis match?
-   - Errors are logged by `/grade` using the **canonical `errors/log.md` schema
-     from `skills/answer-processing/SKILL.md` Step 6** — one entry per missed
-     pattern, with `problem_id: chain_<ts>-P<n>`, `pattern: <Pk>`,
-     `error_type:` (`pattern-missed` for an unidentified or out-of-order
-     pattern), and `source: chain/<ts>`. Do **not** invent a `chain_problem`
-     key — `statusline.py`, `session_start.py`, and `weakmap` regex on
+   - Errors are logged by `/grade` **via `scripts/log_tool.py`** using the
+     **canonical `errors/log.md` schema from `skills/answer-processing/SKILL.md`
+     Step 6** — one entry per missed pattern, with
+     `problem_id: chain_<ts>-P<n>`, `pattern: <Pk>`, `error_type:`
+     (`pattern-missed` for an unidentified or out-of-order pattern), and
+     `source: chain/<ts>` (that same value is the `--source=` argument, so a
+     re-grade replaces rather than piles up). Do **not** invent a
+     `chain_problem` key — the tool rejects off-schema entries, and
+     `statusline.py`, `session_start.py`, and `weakmap` regex on
      `pattern:`/`problem_id:`, so any drift silently hides chain errors from the
      weakness snapshot.
 

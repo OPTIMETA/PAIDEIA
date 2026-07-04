@@ -121,7 +121,17 @@ Follow the answer-processing skill pipeline:
    ```
    Plus one closing line (in $INTERFACE_LANG): "Dominant issue: <type>. Next drill: /<command> <target>."
 
-6. **Log errors.** Append each non-✅ entry to `errors/log.md` in the YAML format from answer-processing SKILL.md.
+6. **Log errors.** Build the YAML block for every non-✅ entry (canonical schema from answer-processing SKILL.md Step 6), then write it in ONE call through the deterministic writer — it replaces any prior entries for the same source (idempotent re-grades) and schema-validates before writing:
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/log_tool.py" append \
+     --source="answers/converted/<stem>.md" <<'YAML'
+   - problem_id: <id>
+     ...
+   YAML
+   ```
+
+   Never hand-edit `errors/log.md` appends. If a re-grade produced zero errors, run `log_tool.py remove --source="answers/converted/<stem>.md"` instead so stale entries clear.
 
 7. **Do NOT** print the full reference solution. The user can open it themselves if they want to study.
 

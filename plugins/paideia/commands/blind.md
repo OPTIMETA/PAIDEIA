@@ -42,16 +42,18 @@ Procedure:
    - ❌ on any axis → point out specifically which axis failed, WITHOUT revealing correct answer. Ask for revision.
    - After 2 failed attempts on same axis → give a one-line hint referencing the relevant pattern name.
 
-7. **Log errors** if user needed revision. Use the **canonical schema from `skills/answer-processing/SKILL.md` Step 6** — same keys `/grade` writes, so statusline and weakmap see `/blind` errors too. Append to `errors/log.md`:
-   ```yaml
+7. **Log errors** if user needed revision. Use the **canonical schema from `skills/answer-processing/SKILL.md` Step 6** — same keys `/grade` writes, so statusline and weakmap see `/blind` errors too. Write through the deterministic writer (replaces any prior entries for this drill's source, so re-running `/blind` on the same problem never double-counts):
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/log_tool.py" append --source="blind/<id>" <<'YAML'
    - problem_id: <id>
      pattern: <Pk>
      error_type: pattern-missed | wrong-variable | wrong-end-form
      summary: "<1 line>"
      source: blind/<id>
      date: <ISO>
+   YAML
    ```
-   Map strategy axis → `error_type`: pattern axis → `pattern-missed`, variable axis → `wrong-variable`, end-form axis → `wrong-end-form`.
+   Map strategy axis → `error_type`: pattern axis → `pattern-missed`, variable axis → `wrong-variable`, end-form axis → `wrong-end-form`. Never hand-edit `errors/log.md` appends.
 
 8. **Close** (in $INTERFACE_LANG):
    "To check retention on the same type, do one variant via `/twin <id>`."

@@ -80,19 +80,10 @@ VALID_LANGS = plib.VALID_LANGS
 # already exist; `--fix` creates the rest, then this re-checks).
 WRITABLE_PATHS = [".", "converted", "answers/converted", "errors"]
 
-# Seed for errors/log.md — identical to init-course Step 4 so /grade and /weakmap
-# find the schema they expect.
-ERRORS_LOG_SEED = """# Error log
-
-<!-- Append-only YAML entries. Schema:
-- problem_id: <id>
-  pattern: <Pk>
-  error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
-  summary: "<1 line>"
-  source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
-  date: <ISO8601>
--->
-"""
+# Seed for errors/log.md — canonical text lives in paideia_lib, identical to
+# what init-course Step 4 writes, so /grade and /weakmap find the schema they
+# expect.
+ERRORS_LOG_SEED = plib.ERRORS_LOG_SEED
 
 OK, WARN, FAIL, SKIP = "ok", "warn", "fail", "skip"
 _ICON = {OK: "✓", WARN: "⚠", FAIL: "✗", SKIP: "·"}

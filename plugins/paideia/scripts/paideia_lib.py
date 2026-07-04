@@ -22,6 +22,26 @@ from pathlib import Path
 VALID_ENGINES = {"claude", "ollama", "tesseract"}
 VALID_LANGS = {"en", "ko"}
 
+ERROR_TYPES = {
+    "pattern-missed", "wrong-variable", "wrong-end-form",
+    "algebraic", "sign", "definition",
+}
+
+# Seed for errors/log.md — the same text init-course Step 4 writes and doctor
+# --fix restores, so /grade and /weakmap always find the schema they expect.
+ERRORS_LOG_SEED = """# Error log
+
+<!-- Append-only YAML entries. Schema:
+- problem_id: <id>
+  pattern: <Pk>
+  error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
+  summary: "<1 line>"
+  source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
+  date: <ISO8601>
+Write entries via scripts/log_tool.py (idempotent per source) — do not hand-edit appends.
+-->
+"""
+
 _META_RX = re.compile(r"^\s*([A-Z_][A-Z0-9_]*)\s*:\s*(.+?)\s*$")
 
 # Robust to schema drift: the canonical /grade entry uses `pattern:` but older
