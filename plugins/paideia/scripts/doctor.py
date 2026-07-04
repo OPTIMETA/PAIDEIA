@@ -22,6 +22,10 @@ directories, seeds `errors/log.md`, restores the +x bit on plugin scripts, and
 rewrites the absolute paths in `.claude/settings.json` (using CLAUDE_PLUGIN_ROOT
 from the environment). It never runs brew / apt / pip and never guesses
 `.course-meta` values — those are printed as copy-paste commands instead.
+Workspace repairs (directories, log seed, settings.json) run **only in course
+mode** (`.course-meta` present): in global mode `--fix` restores the +x bits
+and nothing else, so running it in an arbitrary folder never scaffolds a
+course skeleton there.
 
 Invoked by the /paideia:doctor slash command, which reads the JSON/text and
 narrates the result in the course's INTERFACE_LANG.
@@ -33,6 +37,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import subprocess
 import sys
 import urllib.request
@@ -40,7 +45,17 @@ from pathlib import Path
 
 OLLAMA_MODEL = "qwen3-vl:8b"
 
-REQUIRED_PY = ["pypdf", "pdfplumber", "pytesseract", "pdf2image", "PIL", "reportlab"]
+# Python deps, graded by what actually needs them. The old flat REQUIRED_PY
+# hard-failed on pdfplumber/pypdf — libraries the vision pipeline deliberately
+# abandoned — which contradicted the plugin's own routing decision.
+#   core:     pdf2image + PIL — every render path (/ingest, /grade) needs these.
+#   ocr:      pytesseract — required by OCR_ENGINE=ollama (its fallback tier)
+#             and =tesseract; merely useful otherwise.
+#   optional: reportlab (/cheatsheet --pdf only), pypdf + pdfplumber (ad-hoc
+#             merge/split/text-dump work outside the vision pipeline).
+CORE_PY = ["pdf2image", "PIL"]
+OCR_PY = ["pytesseract"]
+OPTIONAL_PY = ["reportlab", "pypdf", "pdfplumber"]
 
 # The exact directory set created by /paideia:init-course Step 4. Kept in sync so
 # `--fix` recreates precisely what bootstrap would have.
@@ -176,21 +191,62 @@ def engine_of(meta: dict[str, str]) -> str | None:
 # checks
 # --------------------------------------------------------------------------- #
 
-def check_python() -> Result:
+def _py_missing(mods: list[str]) -> list[str]:
     missing = []
-    for mod in REQUIRED_PY:
+    for mod in mods:
         rc, _ = run([sys.executable, "-c", f"import {mod}"], timeout=20)
         if rc != 0:
             missing.append(mod)
-    if not missing:
-        return Result("python_deps", "Python deps", OK)
-    pkgs = "pypdf pdfplumber pytesseract pdf2image pillow reportlab"
-    return Result(
-        "python_deps", "Python deps", FAIL,
-        L(f"missing: {', '.join(missing)}", f"누락: {', '.join(missing)}"),
-        L(f"python3 -m pip install --break-system-packages --user {pkgs}",
-          f"python3 -m pip install --break-system-packages --user {pkgs}"),
-    )
+    return missing
+
+
+def check_python(engine: str | None) -> list[Result]:
+    """Three graded results instead of one flat FAIL — severity follows what
+    the missing module actually blocks (mirrors the OCR-binary grading)."""
+    pip = "python3 -m pip install --break-system-packages --user"
+    results: list[Result] = []
+
+    core_missing = _py_missing(CORE_PY)
+    if core_missing:
+        results.append(Result(
+            "python_core", "Python deps (core)", FAIL,
+            L(f"missing: {', '.join(core_missing)} — every ingest/grade render path needs these",
+              f"누락: {', '.join(core_missing)} — 모든 ingest/grade 렌더 경로가 사용"),
+            L(f"{pip} pdf2image pillow", f"{pip} pdf2image pillow"),
+        ))
+    else:
+        results.append(Result("python_core", "Python deps (core)", OK))
+
+    ocr_missing = _py_missing(OCR_PY)
+    if ocr_missing:
+        sev = _ocr_severity(engine, {"ollama", "tesseract"})
+        note_en = "pytesseract missing — needed by OCR_ENGINE=ollama (fallback tier) and =tesseract"
+        note_ko = "pytesseract 누락 — OCR_ENGINE=ollama(폴백 티어)·tesseract 에 필요"
+        if sev == WARN:
+            note_en += " (optional for OCR_ENGINE=claude)"
+            note_ko += " (OCR_ENGINE=claude 에선 선택)"
+        results.append(Result(
+            "python_ocr", "Python deps (pytesseract)", sev,
+            L(note_en, note_ko),
+            L(f"{pip} pytesseract", f"{pip} pytesseract"),
+        ))
+    else:
+        results.append(Result("python_ocr", "Python deps (pytesseract)", OK))
+
+    opt_missing = _py_missing(OPTIONAL_PY)
+    if opt_missing:
+        results.append(Result(
+            "python_optional", "Python deps (optional)", WARN,
+            L(f"missing: {', '.join(opt_missing)} — reportlab: /cheatsheet --pdf; "
+              "pypdf/pdfplumber: ad-hoc PDF ops only (the vision pipeline doesn't use them)",
+              f"누락: {', '.join(opt_missing)} — reportlab: /cheatsheet --pdf 전용; "
+              "pypdf/pdfplumber: 임시 PDF 작업 전용 (비전 파이프라인은 미사용)"),
+            L(f"{pip} {' '.join(opt_missing)}", f"{pip} {' '.join(opt_missing)}"),
+        ))
+    else:
+        results.append(Result("python_optional", "Python deps (optional)", OK))
+
+    return results
 
 
 def check_poppler() -> Result:
@@ -394,9 +450,18 @@ def check_wiring(cwd: Path) -> Result:
     problems_en: list[str] = []
     problems_ko: list[str] = []
 
+    def _script_path(cmd: str) -> str:
+        """Last argv token of a shell command — shlex-parsed so quoted paths
+        with spaces resolve, and a bare `python3 <path>` wrapper is skipped."""
+        try:
+            toks = shlex.split(cmd)
+        except ValueError:
+            toks = cmd.split()
+        return toks[-1] if toks else ""
+
     sl = (data.get("statusLine") or {}).get("command", "")
     if sl:
-        slp = Path(sl)
+        slp = Path(_script_path(sl))
         if not slp.is_file():
             problems_en.append("statusLine path does not exist")
             problems_ko.append("statusLine 경로 없음")
@@ -411,8 +476,7 @@ def check_wiring(cwd: Path) -> Result:
             if h.get("command"):
                 ss_cmds.append(h["command"])
     for cmd in ss_cmds:
-        # last whitespace-separated token is the script path
-        tok = cmd.split()[-1] if cmd.split() else ""
+        tok = _script_path(cmd)
         if tok and not Path(tok).is_file():
             problems_en.append("SessionStart script path does not exist")
             problems_ko.append("SessionStart 스크립트 경로 없음")
@@ -438,8 +502,8 @@ def run_checks(cwd: Path) -> tuple[list[Result], dict[str, str], bool]:
     course_mode = (cwd / ".course-meta").is_file()
     engine = engine_of(meta)
 
-    results: list[Result] = [
-        check_python(),
+    results: list[Result] = check_python(engine)
+    results += [
         check_poppler(),
         check_tesseract(engine),
         check_tesseract_kor(engine),
@@ -465,29 +529,44 @@ def run_checks(cwd: Path) -> tuple[list[Result], dict[str, str], bool]:
 def apply_fixes(cwd: Path) -> list[dict[str, str]]:
     actions: list[dict[str, str]] = []
 
-    # 1. course directories
-    for d in COURSE_DIRS:
-        p = cwd / d
-        if not p.is_dir():
+    # Workspace repairs are gated on course mode. Without this guard,
+    # `/paideia:doctor --fix` run in an arbitrary folder (home dir, another
+    # project) would scaffold all 18 course directories + errors/log.md +
+    # .claude/settings.json right there — creating a course skeleton is
+    # init-course's job, done deliberately, not a side effect of a diagnostic.
+    course_mode = (cwd / ".course-meta").is_file()
+
+    if course_mode:
+        # 1. course directories
+        for d in COURSE_DIRS:
+            p = cwd / d
+            if not p.is_dir():
+                try:
+                    p.mkdir(parents=True, exist_ok=True)
+                    actions.append(L(f"created {d}/", f"{d}/ 생성"))
+                except OSError as e:
+                    actions.append(L(f"FAILED to create {d}/ ({e})",
+                                     f"{d}/ 생성 실패 ({e})"))
+
+        # 2. seed errors/log.md
+        log = cwd / "errors" / "log.md"
+        if not log.is_file():
             try:
-                p.mkdir(parents=True, exist_ok=True)
-                actions.append(L(f"created {d}/", f"{d}/ 생성"))
+                log.parent.mkdir(parents=True, exist_ok=True)
+                log.write_text(ERRORS_LOG_SEED, encoding="utf-8")
+                actions.append(L("seeded errors/log.md", "errors/log.md 시드 생성"))
             except OSError as e:
-                actions.append(L(f"FAILED to create {d}/ ({e})",
-                                 f"{d}/ 생성 실패 ({e})"))
+                actions.append(L(f"FAILED to seed errors/log.md ({e})",
+                                 f"errors/log.md 시드 실패 ({e})"))
+    else:
+        actions.append(L(
+            "skipped workspace repairs — no .course-meta here (global mode); "
+            "use /paideia:init-course to create a course folder",
+            "워크스페이스 복구 건너뜀 — .course-meta 없음(글로벌 모드); "
+            "코스 폴더 생성은 /paideia:init-course 사용"))
 
-    # 2. seed errors/log.md
-    log = cwd / "errors" / "log.md"
-    if not log.is_file():
-        try:
-            log.parent.mkdir(parents=True, exist_ok=True)
-            log.write_text(ERRORS_LOG_SEED, encoding="utf-8")
-            actions.append(L("seeded errors/log.md", "errors/log.md 시드 생성"))
-        except OSError as e:
-            actions.append(L(f"FAILED to seed errors/log.md ({e})",
-                             f"errors/log.md 시드 실패 ({e})"))
-
-    # 3. restore +x on plugin scripts + 4. rewrite settings.json wiring
+    # 3. restore +x on plugin scripts (safe in both modes — targets the plugin
+    #    install, not CWD) + 4. rewrite settings.json wiring (course mode only)
     root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
     if root:
         statusline = Path(root) / "scripts" / "statusline.py"
@@ -499,7 +578,7 @@ def apply_fixes(cwd: Path) -> list[dict[str, str]]:
                     actions.append(L(f"chmod +x {s.name}", f"{s.name} 실행권한 부여"))
                 except OSError:
                     pass
-        if statusline.is_file() and session_start.is_file():
+        if course_mode and statusline.is_file() and session_start.is_file():
             _rewrite_wiring(cwd, statusline, session_start, actions)
     else:
         actions.append(L(
@@ -523,8 +602,10 @@ def _rewrite_wiring(cwd: Path, statusline: Path, session_start: Path,
             data = json.loads(sp.read_text(encoding="utf-8", errors="replace"))
         except (OSError, json.JSONDecodeError):
             data = {}
-    want_sl = str(statusline)
-    want_ss = f"python3 {session_start}"
+    # shlex.quote adds quotes only when the path needs them (spaces etc.), so
+    # existing unquoted-but-identical configs don't churn.
+    want_sl = shlex.quote(str(statusline))
+    want_ss = f"python3 {shlex.quote(str(session_start))}"
     changed = False
 
     if (data.get("statusLine") or {}).get("command") != want_sl:
