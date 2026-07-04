@@ -34,14 +34,18 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from pdf2image import convert_from_path
-
 OLLAMA_MODEL = "qwen3-vl:8b"
 DPI = 300
 MAX_IMG_WIDTH = 1200
 PER_PAGE_TIMEOUT = 1800
 WARMUP_TIMEOUT = 60
 MAX_TOKENS = 6000
+# Context window for the VLM call. Qwen3-VL's image embeddings alone can eat
+# thousands of tokens at 1200px, and the model may generate up to MAX_TOKENS —
+# the old num_ctx=4096 forced context-shifting mid-page, which silently evicted
+# the transcription rules and truncated dense pages. Prompt + image + output
+# must all fit here.
+NUM_CTX = 16384
 
 DEFAULT_COURSE = "math / physics"
 DEFAULT_LANG = "en"
@@ -64,21 +68,6 @@ Rules:
 - If a page has crossed-out work, ignore the strikethrough content.
 - Return ONLY markdown, no commentary, no <think>.
 """
-
-ENG_NOISE_PREFIXES = (
-    "wait,", "wait.", "hmm,", "actually,",
-    "but the hand-written", "the image shows", "the image has",
-    "got it", "let's check", "let's look",
-    "on second thought", "looking at this again",
-)
-
-KOR_NOISE_PREFIXES = (
-    "잠깐", "잠시만", "음,", "음...", "어,", "어...",
-    "다시 보면", "다시 확인", "확인해보면", "생각해보면",
-    "근데 이 이미지", "그런데 이 이미지",
-    "이미지를 보면", "이미지에는", "손글씨를 보면",
-    "한 번 더 보면", "써보면",
-)
 
 
 def build_prompt(course: str | None = None, lang: str | None = None) -> str:
@@ -160,7 +149,7 @@ def call_ollama_vision(img_b64: str, prompt: str) -> str:
         "keep_alive": "15m",
         "options": {
             "temperature": 0.1,
-            "num_ctx": 4096,
+            "num_ctx": NUM_CTX,
             "num_predict": MAX_TOKENS,
             "repeat_penalty": 1.3,
             "repeat_last_n": 256,
@@ -181,48 +170,50 @@ def call_ollama_vision(img_b64: str, prompt: str) -> str:
     return dedupe_loops(text)
 
 
-def _is_noise_sentence(s: str) -> bool:
-    """True iff the sentence looks like VLM self-talk we should drop."""
-    lower = s.lower()
-    if lower.startswith(ENG_NOISE_PREFIXES):
-        return True
-    stripped = s.lstrip()
-    for prefix in KOR_NOISE_PREFIXES:
-        if stripped.startswith(prefix):
-            return True
-    return False
-
-
-def _strip_ngram_tail(text: str, n: int = 5, max_repeats: int = 3) -> str:
+def _strip_ngram_tail(line: str, n: int = 5, max_repeats: int = 3) -> str:
     """Trim a trailing n-gram loop, i.e. the `A B C D E` 3-peat tail Qwen3
-    sometimes emits *inside* a sentence (so sentence-level dedup doesn't see it)."""
-    tokens = text.split()
+    sometimes emits *inside* a line (so line-level dedup doesn't see it)."""
+    tokens = line.split()
     if len(tokens) < n * max_repeats:
-        return text
+        return line
     tail = tokens[-n * max_repeats:]
     window = tuple(tail[:n])
     if all(tuple(tail[i * n:(i + 1) * n]) == window for i in range(max_repeats)):
         return " ".join(tokens[: -n * (max_repeats - 1)])
-    return text
+    return line
 
 
 def dedupe_loops(text: str) -> str:
-    """Drop VLM self-doubt sentences, dedupe sentence-level repeats, trim tail-loops."""
-    sentences = re.split(r"(?<=[.?!])\s+", text)
+    """Trim obvious VLM repetition pathologies while preserving line structure.
+
+    Line-wise on purpose — the old sentence-split + `" ".join` rebuild collapsed
+    the newline after any sentence-ending period, which glued following
+    `## headings` and `$$...$$` display blocks onto the previous line and broke
+    the markdown /grade parses. And it dropped "self-talk"-looking sentences by
+    prefix ("Let's check…", "Actually,…"), which are phrases a student can
+    legitimately write in an answer — a transcript must never delete page
+    content, so no prefix-based filtering here (the prompt contract's
+    "no commentary" clause is the defense against self-talk instead).
+
+    What this does do, both scoped to unambiguous decode loops:
+    - collapses the 3rd+ consecutive occurrence of an identical non-blank line
+      (a student may repeat a line once; only a run of 3+ is loop-shaped)
+    - trims a trailing 3-peat n-gram loop inside each line
+    """
     kept: list[str] = []
-    seen: set[str] = set()
-    for s in sentences:
-        s = s.strip()
-        if not s:
-            continue
-        if _is_noise_sentence(s):
-            continue
-        key = re.sub(r"\s+", " ", s[:100])
-        if key in seen:
-            continue
-        seen.add(key)
-        kept.append(s)
-    return _strip_ngram_tail(" ".join(kept))
+    run_norm: str | None = None
+    run_count = 0
+    for ln in text.splitlines():
+        norm = re.sub(r"\s+", " ", ln.strip())
+        if norm and norm == run_norm:
+            run_count += 1
+            if run_count >= 3:
+                continue
+        else:
+            run_norm = norm if norm else None
+            run_count = 1
+        kept.append(_strip_ngram_tail(ln))
+    return "\n".join(kept).strip()
 
 
 _TESS_LANG = {"en": "eng", "ko": "eng+kor"}
@@ -245,6 +236,10 @@ def ocr_pdf(
     course_name: str | None = None,
     lang: str | None = None,
 ) -> None:
+    # Imported here, not at module top, so the pure text helpers (build_prompt,
+    # dedupe_loops) stay importable/testable on machines without pdf2image.
+    from pdf2image import convert_from_path
+
     images = convert_from_path(str(pdf_path), dpi=DPI)
 
     # Resolve effective course: explicit --course-name > .course-meta in CWD >
@@ -293,7 +288,9 @@ def ocr_pdf(
             body = "<!-- TIER: tesseract fallback -->\n\n" + tesseract_fallback(images, effective_lang)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(header + body)
+    # Explicit utf-8: under a minimal/C-locale environment the platform default
+    # can be ASCII, which would crash on Korean handwriting output.
+    out_path.write_text(header + body, encoding="utf-8")
     sys.stderr.write(f"[vision-ocr] wrote {out_path} ({len(header+body)} chars)\n")
 
 
