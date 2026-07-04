@@ -233,7 +233,7 @@ Paideia의 산출물 — `summary.md`, `patterns.md`, `coverage.md`, `/paideia:h
 4. 기본 OCR 엔진을 고릅니다 — `claude` (네이티브 비전, 추가 설치 없음) / `ollama` (로컬 Qwen3-VL, 약 6 GB 모델을 백그라운드에서 받음) / `tesseract` (가장 가볍고 빠름, 필기 정확도는 낮음)
 5. 디렉토리 골격을 생성합니다 (`materials/`, `converted/`, `course-index/`, `quizzes/`, `mock/`, `twins/`, `chain/`, `derivations/`, `cheatsheet/`, `weakmap/`, `answers/converted/`, `errors/`)
 6. `.course-meta`(`INTERFACE_LANG` + `OCR_ENGINE`을 담고 있으며 `/paideia:grade`, `session_start.py`, `vision_ocr.py`, 모든 슬래시 커맨드가 읽습니다)와 프로젝트 수준 `CLAUDE.md`를 작성합니다
-7. 이 폴더 전용 statusline을 걸어 둡니다 (`.claude/settings.json` → `scripts/statusline.py`). 이 폴더에 들어와 있을 때만 Claude Code의 statusline 슬롯에 `paideia · <COURSE> · D-N · <phase> · P<k> ↑`가 뜹니다
+7. 이 폴더 전용 statusline(`scripts/statusline.py`)과 `SessionStart` 훅(`scripts/session_start.py`)을 `.claude/settings.json`에 함께 걸어 둡니다. statusline은 이 폴더에 들어와 있을 때만 `paideia · <COURSE> · D-N · <phase> · P<k> ↑`를 표시하고, 훅은 새 대화가 열릴 때마다 같은 신호(D-N·phase·최다 실수 패턴)를 2줄 리마인더로 첫 턴 컨텍스트에 출력합니다
 8. `git init`을 수행해 첫 키 입력부터 준비 과정이 버전 관리되도록 합니다
 
 개별 채점 호출에서는 엔진을 그때그때 덮어쓰실 수 있습니다. 예: `/paideia:grade --ocr=claude path/to/answer.pdf`.
@@ -414,7 +414,7 @@ Claude Code에서:
 | `materials/**/*.pdf` | 비전 파이프라인 (병렬 에이전트, LaTeX 충실) |
 | `materials/**/*.md` | 프로비넌스 헤더를 붙여 통과 복사 |
 
-파이프라인이 동작하는 방식: 각 페이지를 `dpi=160`로 PNG 렌더링하고, **어떤 에이전트가 읽기를 시작하기 전에** 모든 PNG의 긴 변을 ≤1800 px로 축소합니다 (Claude의 다중 이미지 요청은 2000 px 초과 이미지를 강하게 거부하며, 16:9 슬라이드를 dpi=160으로 렌더링하면 이 한계를 쉽게 넘습니다). 그 뒤 PDF당 하나씩 `general-purpose` 에이전트를 병렬로 띄우고, 각 에이전트는 자신의 페이지를 **순차적으로** 읽어(Read 호출을 병렬로 묶으면 같은 한계에 걸립니다) LaTeX 마크다운으로 전사합니다. 결과는 `ℏ ∂ p2 ℏ 2 ∂ 2 p ̂` 같은 파편이 아니라 `$$\hat H = -\frac{\hbar^2}{2m}\partial_x^2 + V(x)$$` 같은 깔끔한 수식입니다. 실제 13강 208페이지 양자역학 강의 전체가 `[?]` 마커 0개로 통과했습니다.
+파이프라인이 동작하는 방식: 각 페이지를 `dpi=160`로 PNG 렌더링하고, **어떤 에이전트가 읽기를 시작하기 전에** 모든 PNG의 긴 변을 ≤1800 px로 축소합니다 (Claude의 다중 이미지 요청은 2000 px 초과 이미지를 강하게 거부하며, 16:9 슬라이드를 dpi=160으로 렌더링하면 이 한계를 쉽게 넘습니다). 그 뒤 PDF당 하나씩 `general-purpose` 에이전트를 병렬로 띄우고, 각 에이전트는 자신의 페이지를 **순차적으로** 읽어(Read 호출을 병렬로 묶으면 같은 한계에 걸립니다) LaTeX 마크다운으로 전사합니다. 30페이지를 넘는 PDF는 연속 페이지 구간별로 여러 에이전트에 나눠 전사한 뒤 하나의 출처 헤더 아래로 이어 붙이므로, 두꺼운 교재 챕터가 단일 에이전트의 컨텍스트를 넘치게 하는 일이 없습니다. 결과는 `ℏ ∂ p2 ℏ 2 ∂ 2 p ̂` 같은 파편이 아니라 `$$\hat H = -\frac{\hbar^2}{2m}\partial_x^2 + V(x)$$` 같은 깔끔한 수식입니다. 실제 13강 208페이지 양자역학 강의 전체가 `[?]` 마커 0개로 통과했습니다.
 
 자세한 내용은 `plugins/paideia/skills/pdf/VISION.md`에 있습니다.
 
@@ -502,9 +502,12 @@ PAIDEIA/
     │   ├── grade.md        weakmap.md   cheatsheet.md
     │   └── alt.md
     └── scripts/
+        ├── paideia_lib.py               # 공용 코어: .course-meta 파싱, D-day 계산, phase 상태 머신
+        ├── log_tool.py                  # errors/log.md 전용 결정론적 기록기 — 스키마 검증, source별 멱등
         ├── doctor.py                    # /paideia:doctor: 설치 + 워크스페이스 진단, 권한 불필요 --fix
         ├── vision_ocr.py                # 선택적 사용: --ocr=ollama|tesseract 경로에서 쓰는 ollama qwen3-vl + tesseract 드라이버
-        └── statusline.py                # Claude Code statusline 슬롯용 — `paideia · <COURSE> · D-N · <phase> · P<k> ↑`를 출력
+        ├── statusline.py                # Claude Code statusline 슬롯용 — `paideia · <COURSE> · D-N · <phase> · P<k> ↑`를 출력
+        └── session_start.py             # SessionStart 훅: 새 세션 첫머리에 "phase / 최다 실수 / 다음 명령" 2줄 리마인더 출력
 ```
 
 ---

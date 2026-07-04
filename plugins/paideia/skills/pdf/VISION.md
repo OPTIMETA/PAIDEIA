@@ -21,7 +21,7 @@ These failures are silent — the extraction completes, the file gets written, a
 
 ```
 materials/<cat>/X.pdf
-    ├─(pdf2image, dpi=160)→  converted/<cat>/_pages/X/p01..pNN.png
+    ├─(pdf2image, dpi=160)→  converted/<cat>/_pages/X/p001..pNNN.png
     ├─(PIL resize, ≤1800px)→ (in-place)
     └─(parallel Agent per file, vision Read of PNGs)→ converted/<cat>/X.md
 ```

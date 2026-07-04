@@ -116,5 +116,22 @@ class TestScriptsInventory(unittest.TestCase):
         self.assertEqual(definers, ["paideia_lib.py"], definers)
 
 
+class TestReadmeClaims(unittest.TestCase):
+    """Facts the READMEs state about the repo must match the repo."""
+
+    def test_command_count_claims(self):
+        for name in ("README.md", "README.ko.md"):
+            text = (REPO / name).read_text(encoding="utf-8")
+            self.assertNotIn("14 `/paideia:`", text, f"{name} stale command count")
+            self.assertNotIn("14개의 `/paideia:`", text, f"{name} stale command count")
+
+    def test_what_ships_lists_every_script(self):
+        shipped = {p.name for p in SCRIPTS.glob("*.py")}
+        for name in ("README.md", "README.ko.md"):
+            text = (REPO / name).read_text(encoding="utf-8")
+            missing = [s for s in shipped if s not in text]
+            self.assertEqual(missing, [], f"{name} What-ships tree missing {missing}")
+
+
 if __name__ == "__main__":
     unittest.main()

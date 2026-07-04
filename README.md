@@ -200,7 +200,7 @@ The desktop app is the smoothest reading surface for Paideia — `summary.md`, `
    /plugin install paideia@paideia-marketplace
    ```
 
-3. The 14 `/paideia:` slash commands are now available in every conversation. Continue to **Per-course bootstrap** below.
+3. The 16 `/paideia:` slash commands are now available in every conversation. Continue to **Per-course bootstrap** below.
 
 ### Install via the Claude Code CLI
 
@@ -414,7 +414,7 @@ In Claude Code:
 | `materials/**/*.pdf` | Vision pipeline (parallel agents, LaTeX-faithful) |
 | `materials/**/*.md` | Copy-through with provenance header |
 
-How the pipeline runs: every page is rendered to PNG at `dpi=160`; every PNG is resized to ≤1800 px on the long edge **before any agent starts reading** (Claude's many-image requests hard-reject images >2000 px; 16:9 slides at dpi=160 blow past that unless you preempt the resize); then one parallel `general-purpose` agent is spawned per PDF, each of which reads its own pages *sequentially* (parallel batches trip the same dimension limit) and transcribes to LaTeX markdown. Output like `$$\hat H = -\frac{\hbar^2}{2m}\partial_x^2 + V(x)$$` instead of `ℏ ∂ p2 ℏ 2 ∂ 2 p ̂`. A real 13-lecture, 208-page quantum mechanics course ran end-to-end with zero `[?]` markers.
+How the pipeline runs: every page is rendered to PNG at `dpi=160`; every PNG is resized to ≤1800 px on the long edge **before any agent starts reading** (Claude's many-image requests hard-reject images >2000 px; 16:9 slides at dpi=160 blow past that unless you preempt the resize); then one parallel `general-purpose` agent is spawned per PDF, each of which reads its own pages *sequentially* (parallel batches trip the same dimension limit) and transcribes to LaTeX markdown. PDFs over 30 pages are split across multiple agents in consecutive page ranges and re-joined under one provenance header, so a big textbook chapter can't overflow a single agent's context. Output like `$$\hat H = -\frac{\hbar^2}{2m}\partial_x^2 + V(x)$$` instead of `ℏ ∂ p2 ℏ 2 ∂ 2 p ̂`. A real 13-lecture, 208-page quantum mechanics course ran end-to-end with zero `[?]` markers.
 
 Details in `plugins/paideia/skills/pdf/VISION.md`.
 
@@ -506,6 +506,8 @@ PAIDEIA/
     │   ├── grade.md        weakmap.md   cheatsheet.md
     │   └── alt.md
     └── scripts/
+        ├── paideia_lib.py               # shared core: .course-meta parsing, D-day math, the phase state machine
+        ├── log_tool.py                  # deterministic errors/log.md writer — schema-validated, idempotent per source
         ├── doctor.py                    # /paideia:doctor: install + workspace diagnostic, permission-free --fix
         ├── vision_ocr.py                # opt-in: ollama qwen3-vl driver + tesseract forcing, for --ocr=ollama|tesseract
         ├── statusline.py                # emits `paideia · <COURSE> · D-N · <phase> · P<k> ↑` for Claude Code's statusline slot
