@@ -210,31 +210,33 @@ elif [ -f .claude/settings.json ]; then
   [ -n "$STATUSLINE_SRC" ]    && echo "  statusLine: { \"type\": \"command\", \"command\": \"$STATUSLINE_SRC\" }"
   [ -n "$SESSION_START_SRC" ] && echo "  hooks.SessionStart: [{ hooks: [{ \"type\": \"command\", \"command\": \"python3 $SESSION_START_SRC\" }] }]"
 else
-  # Heredoc WITHOUT quotes on EOF — we want $STATUSLINE_SRC / $SESSION_START_SRC expanded
-  # at write time so the JSON ends up with literal absolute paths, not shell variable refs.
-  # Statusline is invoked via its shebang (no `python3` wrapper, Claude Code runs it with a
-  # minimal env). SessionStart runs in a richer hook env so we explicitly call `python3`
-  # for portability.
-  cat > .claude/settings.json <<EOF
-{
-  "statusLine": {
-    "type": "command",
-    "command": "$STATUSLINE_SRC"
-  },
-  "hooks": {
-    "SessionStart": [
-      {
+  # JSON is assembled by python, not a bash heredoc, for two reasons:
+  # 1. Per-slot presence — if exactly one script resolved, only that slot is
+  #    written. (The old heredoc emitted both slots unconditionally, so a
+  #    missing script produced a broken `"command": ""` entry.)
+  # 2. Space-safe quoting — the command strings are shell lines, so script
+  #    paths get shlex-quoted; an install path containing spaces survives.
+  #    shlex.quote adds quotes only when needed, so normal paths stay bare.
+  # Statusline is invoked via its shebang (no `python3` wrapper, Claude Code
+  # runs it with a minimal env). SessionStart runs in a richer hook env so we
+  # explicitly call `python3` for portability.
+  python3 - "$STATUSLINE_SRC" "$SESSION_START_SRC" <<'PY'
+import json, shlex, sys
+sl, ss = sys.argv[1], sys.argv[2]
+data = {}
+if sl:
+    data["statusLine"] = {"type": "command", "command": shlex.quote(sl)}
+if ss:
+    data["hooks"] = {"SessionStart": [{
         "matcher": "startup|resume",
-        "hooks": [
-          { "type": "command", "command": "python3 $SESSION_START_SRC" }
-        ]
-      }
-    ]
-  }
-}
-EOF
-  echo "wiring: statusLine      → $STATUSLINE_SRC"
-  echo "wiring: SessionStart    → $SESSION_START_SRC"
+        "hooks": [{"type": "command", "command": f"python3 {shlex.quote(ss)}"}],
+    }]}
+with open(".claude/settings.json", "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+print(f"wiring: statusLine      → {sl or '(script missing — slot omitted)'}")
+print(f"wiring: SessionStart    → {ss or '(script missing — slot omitted)'}")
+PY
   echo "  (if nothing appears after this, fully quit and relaunch Claude Code —"
   echo "   both slots are read at app startup, not on /plugin reload)"
 fi
