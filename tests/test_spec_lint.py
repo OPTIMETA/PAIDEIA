@@ -116,6 +116,107 @@ class TestScriptsInventory(unittest.TestCase):
         self.assertEqual(definers, ["paideia_lib.py"], definers)
 
 
+class TestAnalyzeFanOut(unittest.TestCase):
+    """Lints for the analyze fan-out / partial-commit spec (canonical, TKT-ANALYZE-BUDGET-PARTIAL-COMMIT).
+
+    Pins the *canonical* mechanisms — per-FILE parallel fan-out (FND-002),
+    `.partial` atomic writes, and the `<!-- COVERAGE: … -->` telemetry — and bans
+    the forked K=8/T=30/--full/deferred-comment constructs that once diverged from
+    the OPTIMETA vendored corpus. Cadence wording is pinned across both files.
+    """
+
+    def setUp(self):
+        self.analyze = (COMMANDS / "analyze.md").read_text(encoding="utf-8")
+        self.skill = (SKILLS / "course-builder" / "SKILL.md").read_text(encoding="utf-8")
+
+    # AC-1 — per-FILE parallel fan-out (NOT a single sequential-read agent per batch).
+    def test_per_file_parallel_fanout(self):
+        self.assertIn("Task sub-agent **per file**", self.analyze,
+                      "analyze.md must fan out one Task sub-agent PER FILE (ingest precedent, FND-002)")
+        self.assertIn("single-pass over the full converted directory is forbidden", self.analyze,
+                      "analyze.md must forbid the single-pass design that caused the SIGTERM")
+        # The defeating 'one sub-agent per BATCH reading sequentially' model must NOT resurface.
+        self.assertNotIn("one sub-agent per batch", self.analyze.lower(),
+                         "per-BATCH sequential-read model defeats early batch-1 flush (issue #3)")
+        self.assertIn("parallel batches sized to the concurrency ceiling", self.skill,
+                      "SKILL.md must describe parallel per-file batches, not a per-batch serial reader")
+
+    # AC-2 — `.partial` atomic-write convention is the artifact the acceptance gate counts.
+    def test_partial_atomic_writes(self):
+        for scratch in ("summary.md.partial", "patterns.md.partial", "coverage.md.partial"):
+            self.assertIn(scratch, self.analyze,
+                          f"analyze.md must write {scratch} scratch then rename (atomic write)")
+        self.assertIn("then rename to the final path", self.analyze,
+                      "analyze.md must rename the .partial scratch to the final path")
+        self.assertIn("`.partial` then rename", self.skill,
+                      "SKILL.md must state the .partial-then-rename atomic convention")
+
+    # AC-3 — COVERAGE telemetry comment (files=/partial= signal the gate reads).
+    def test_coverage_metadata_comment(self):
+        self.assertIn("<!-- COVERAGE: files=", self.analyze,
+                      "analyze.md must emit the <!-- COVERAGE: files=A/N, partial=… --> telemetry")
+        self.assertIn("partial=", self.analyze,
+                      "analyze.md COVERAGE comment must carry the partial= flag")
+
+    # AC-4 — Reduce entered as soon as one batch completes (early partial flush guarantee).
+    def test_reduce_enters_on_first_batch(self):
+        self.assertIn("The Reduce phase (Steps 1–3) must be entered even if not all fan-out agents have completed",
+                      self.analyze,
+                      "analyze.md must mandate entering Reduce before all agents finish")
+        self.assertIn("as soon as any batch completes", self.skill,
+                      "SKILL.md must state Reduce is entered as soon as any batch completes")
+
+    # AC-5 — canonical subset flags (no forked --full / auto-narrow).
+    def test_canonical_subset_flags(self):
+        front = self.analyze.split("---", 2)[1]
+        for flag in ("--files=", "--since=", "--lectures-only"):
+            self.assertIn(flag, front, f"analyze.md argument-hint must list {flag}")
+            self.assertIn(flag, self.analyze, f"analyze.md body must reference {flag}")
+        self.assertIn("--files=", self.skill)
+        self.assertIn("--since=", self.skill)
+        self.assertIn("--lectures-only", self.skill)
+
+    # AC-6 — 6-key schema / canonical tier vocabulary intact.
+    def test_six_key_schema_headers_unchanged(self):
+        for header in ("Problem", "Primary §", "Secondary §",
+                       "Patterns", "HW coverage", "Exam tier"):
+            self.assertIn(header, self.analyze,
+                          f"analyze.md must retain 6-key header '{header}'")
+        # The full 4-tier vocabulary, not the forked '🔥 Exam-likely' ceiling.
+        for tier in ("🔥🔥 Exam-primary", "🔥 Exam-likely", "🟡 Exam-possible", "⚪ Low-risk"):
+            self.assertIn(tier, self.analyze,
+                          f"analyze.md must carry canonical tier '{tier}'")
+
+    # AC-7 — forked constructs must NOT resurface in either file.
+    def test_forked_constructs_absent(self):
+        for f, name in ((self.analyze, "analyze.md"), (self.skill, "course-builder/SKILL.md")):
+            for token in ("K = 8", "T = 30", "--full", "Auto-narrow",
+                          "auto-narrow", "deferred: solutions pass"):
+                self.assertNotIn(token, f,
+                                 f"{name} must not reintroduce forked construct '{token}' "
+                                 "(sync FROM canonical, do not fork the spec)")
+
+    # AC-8 — cadence wording pinned IDENTICALLY across both files (issue #7).
+    def test_cadence_wording_shared_across_files(self):
+        # Both spec files must agree on the partial-commit cadence via a shared phrase,
+        # not a bare 'partial'/'batch' substring that lets the two drift.
+        shared = "`.partial`"
+        self.assertIn(shared, self.analyze, "analyze.md must name the .partial atomic scratch")
+        self.assertIn(shared, self.skill, "SKILL.md must name the .partial atomic scratch")
+        # Neither file may describe a 'flush after batch 1 then merge' vs 'rewrite after each
+        # batch' split: the canonical intent is a single cadence — valid/merged state after
+        # every batch, first flush on the first completed batch.
+        self.assertNotIn("after batch 1 completes, immediately write", self.analyze)
+        self.assertNotIn("After EACH batch completes, all three", self.skill)
+
+    # AC-9 — i18n: $INTERFACE_LANG gating + verbatim-token note preserved.
+    def test_interface_lang_gating(self):
+        self.assertIn("$INTERFACE_LANG", self.analyze,
+                      "analyze.md must gate user-facing prose on $INTERFACE_LANG")
+        self.assertIn("verbatim", self.analyze,
+                      "analyze.md must note that token identifiers stay verbatim")
+
+
 class TestReadmeClaims(unittest.TestCase):
     """Facts the READMEs state about the repo must match the repo."""
 

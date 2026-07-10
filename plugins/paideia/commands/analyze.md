@@ -1,6 +1,6 @@
 ---
 description: Analyze converted course materials to produce the course knowledge base — patterns.md, coverage.md, summary.md.
-argument-hint: "[optional weak-zone topics to emphasize, comma-separated]"
+argument-hint: "[weak-zone topics, comma-separated] [--files=<glob>] [--since=<YYYY-MM-DD>] [--lectures-only] [--force]"
 ---
 
 ## Output language
@@ -9,28 +9,170 @@ Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose 
 
 Load `skills/course-builder/SKILL.md`.
 
-Arguments (user's declared weak zones, comma-separated): $ARGUMENTS
+Arguments: $ARGUMENTS
+
+Non-flag tokens (comma-separated, excluding any `--` prefixed tokens) are the user's declared weak zones. Tokens beginning with `--` are control flags parsed in Step 0.5 below — exclude them from the weak-zone list.
 
 Prerequisite check: verify that `converted/` contains files. If empty, tell the user to run `/ingest` first.
 
 Follow the course-builder Phase 2 analyze pipeline:
 
-## Step 1: Generate `course-index/summary.md`
+## Step 0 — Discovery & fan-out plan
 
-Parse section headers from `converted/lectures/*.md` in file-order. Build a topic tree. Cross-reference with `converted/textbook/*.md` (if present — textbooks often use different numbering).
+List all files matching `converted/lectures/*.md`, `converted/textbook/*.md`, `converted/homework/*.md`, and `converted/solutions/*.md`. Count the total as N.
 
-If the course uses its own section numbering (§ X.Y, Ch N.M, Chapter X §Y, Lecture N), use it. Otherwise auto-number.
+Output in $INTERFACE_LANG (keep the token identifier verbatim):
 
-Include in `summary.md`:
-- One-paragraph scope statement (inferred from all lecture notes combined)
-- Topic tree with cross-references to source files
-- Difficulty ordering based on progression
+```
+Analyzing N files (0/N)...
+```
 
-## Step 2: Generate `course-index/patterns.md`
+**Fan-out (mandatory — single-pass over the full converted directory is forbidden):**
 
-Scan `converted/solutions/*.md` and any example-problems in lecture notes. Identify recurring solution moves.
+Spawn one `general-purpose` Task sub-agent **per file**, in parallel, up to the workflow concurrency ceiling (currently ~10 parallel agent slots) at once; batches sized to that ceiling. If N exceeds the ceiling, process in sequential batches each sized to the concurrency ceiling (currently ~10), waiting for each batch to complete before launching the next — maximize parallelism within each batch. Each agent reads only its own single file and returns a **partial index** (structured summary) — it must not re-read or transcribe the full original text back to the parent.
 
-Target 15–30 patterns. Each pattern card:
+Before spawning the first batch, output a batch-progress header:
+
+```
+Batch 1/K (files 1..min(ceiling, N))
+```
+
+where K = ceil(N / ceiling). At the start of each subsequent batch M output:
+
+```
+Batch M/K (files a..b)
+```
+
+Stream this header immediately before spawning each batch's agents.
+
+**Partial-index return schema** (each sub-agent returns JSON or fixed-header MD conforming to this shape):
+
+```json
+{
+  "file": "<relative path>",
+  "sections": [
+    { "anchor": "§1.1", "title": "Example title" }
+  ],
+  "key_moves": [
+    { "name": "short move name", "problem_id": "hw2-p1", "section": "§1.1" }
+  ],
+  "problems": [
+    { "id": "hw2-p1", "primary_§": "§1.1", "secondary_§": ["§2.3"], "patterns": ["P6"] }
+  ]
+}
+```
+
+**Sub-agent prompt template** (fill in bracketed values):
+
+```
+You are a course-index extraction agent for a <domain> course.
+
+Your task: read the single file at <abs_path> and return a partial index.
+Do NOT read any other file. Do NOT re-emit the original text or prose summaries.
+
+Read only its own file: use the Read tool exactly once on <abs_path>.
+
+Return ONLY a JSON object (no prose, no markdown outside the JSON fence) conforming
+to this schema:
+
+{
+  "file": "<rel_path>",
+  "sections": [ { "anchor": "§X.Y or ChN", "title": "section title" } ],
+  "key_moves": [ { "name": "move name", "problem_id": "hwN-pM", "section": "§X.Y" } ],
+  "problems": [ { "id": "hwN-pM", "primary_§": "§X.Y", "secondary_§": ["§A.B"], "patterns": ["Pk"] } ]
+}
+
+Rules:
+- sections: every numbered section or slide heading found, in document order.
+- key_moves: recurring solution techniques you observe (name + example problem_id + section).
+- problems: every distinct problem ID found, with its primary and secondary section tags.
+- patterns: pattern IDs if labelled (e.g. "P6"), otherwise omit the field.
+- If the file contains no problems (e.g. a lecture note), return empty arrays for key_moves and problems.
+- Do not invent content not present in the file.
+- Do not refuse or stop partway — always return what you found, even if partial.
+- **Return the JSON only. Do NOT restate section bodies, equations, or prose. `title` ≤ ~8 words. Cap `sections`/`key_moves`/`problems` at what is materially distinct; omit empty optional fields entirely (do not emit `null`/`[]` for absent `patterns`).**
+```
+
+`<domain>` should be whatever the course is about (quantum mechanics, linear algebra, discrete math, real analysis, E&M, etc.) — infer from the materials or ask the user once if unclear.
+
+**Alternative (chunk-incremental aggregation):** If the fan-out count would exceed available agent slots, process files in chunks sized to the concurrency ceiling (currently ~8–10), accumulating a running merged partial index after each chunk completes. Either parallel fan-out or chunk-incremental aggregation is required; a single sequential pass over the full `converted/` directory is not permitted.
+
+As each sub-agent or chunk completes, stream a progress line to chat (in $INTERFACE_LANG, keeping the token identifier verbatim):
+
+```
+(k/N) <filename> done
+```
+
+The batch-progress header `Batch M/K (files a..b)` (streamed at each batch start, as described above) and the per-file `(k/N)` lines together give the user clear visibility into both batch-level and file-level progress.
+
+If a sub-agent stops or returns malformed output, mark that file FAILED, continue with the remaining files, and note the failure in the Step 4 summary.
+
+## Step 0.5 — Subset & incremental selection
+
+**Applied after discovery (Step 0 scan) and before fan-out.** Control flags from `$ARGUMENTS` (the `--`-prefixed tokens) filter the discovered file list. Three flags are supported:
+
+- **`--files=<glob>`**: intersect the `converted/**` scan result with the provided glob. Files outside the glob are excluded from this run; count them as "outside subset" (see Summary footnote below). The glob is matched against relative paths from the course root (e.g. `--files=lectures/L2{2,3,4}.md`). Neither idempotence nor forced-reconvert logic is altered for matched files.
+
+- **`--since=<YYYY-MM-DD>`**: include only `converted/` files whose modification time (`mtime`) is on or after that date (incremental re-analysis). If the date string cannot be parsed as a valid `YYYY-MM-DD`, ignore it and proceed with the full file list, printing one notice in both languages:
+  - **en:** "Could not parse `--since` value; ignoring and analyzing all files."
+  - **ko:** "`--since` 값을 파싱할 수 없습니다. 무시하고 전체 파일을 분석합니다."
+
+- **`--lectures-only`**: restrict selection to `converted/lectures/*.md` only (exclude homework, solutions, textbook files). If `--files=` is also present, apply both as an AND intersection.
+
+When none of these three flags are present, proceed with the full discovered file list (original behavior).
+
+**Partial-index integrity warning (subset/incremental runs):** When a subset or incremental selection is active, the three output files (`summary.md`, `patterns.md`, `coverage.md`) represent **a partial index over the selected file range only**. If existing `course-index/*.md` files are present, **do not overwrite them with a narrowed result** — instead, **merge**: preserve existing section anchors and pattern cards that fall outside the selected file range, and update only the entries covered by files in this run. Append a footnote to the Summary chat output (not as a table column; the golden table headers are unchanged):
+
+  - **en:** "M files outside the selected subset were not re-analyzed; the index reflects a partial re-run."
+  - **ko:** "M개 파일이 선택 범위 밖이라 재분석되지 않았습니다. 인덱스는 부분 재실행 결과입니다."
+
+(where M = total discovered files − files selected for this run; omit the footnote when M = 0).
+
+## Step 0.75 — Partial-commit guarantee
+
+**The Reduce phase (Steps 1–3) must be entered even if not all fan-out agents have completed.** As soon as at least one batch completes and returns a partial index, proceed to Reduce with the collected partial indexes — do not wait indefinitely for lagging agents.
+
+If execution is interrupted mid-run (manual kill, harness timeout, or any other cause), the last successfully committed batch's partial indexes must remain on disk. The three output files must be in a parseable state conforming to their anchor contracts (§ headers, table headers, pattern card format) whenever they exist — a reader must never observe a torn or empty file.
+
+**Atomic writes:** Write each of the three output files to a `.partial` scratch path first (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`), then rename to the final path. Never write the final path incrementally — a reader must never observe a partial/torn file. (Same rule as `ingest.md` atomic write convention.)
+
+**Partial-run metadata comment (optional, additive):** When the run is a subset or partial completion, prepend the following HTML comment to `coverage.md` immediately before the `## Reverse map …` header (this comment is a **selective key** — its absence does not affect any parser; `parseCoverage` skips non-`|`-prefixed lines):
+
+```
+<!-- COVERAGE: files=<A>/<N>, partial=<true|false>, since=<date|->, subset=<glob|-> -->
+```
+
+where A = files successfully processed, N = total discovered. This comment is **never** treated as a tier row by `parseCoverage`.
+
+## Step 1 (Reduce) — Generate `course-index/summary.md`
+
+Merge the `sections` arrays from all partial indexes. De-duplicate entries with the same anchor (file-order wins). Sort by document order (file order, then section order within file). Cross-reference lecture and textbook section numbering if both are present.
+
+Build `summary.md` from the merged section list:
+
+- One-paragraph scope statement (inferred from the merged section titles — do NOT re-read any converted file).
+- Topic tree with `§` anchors cross-referencing source files.
+- Difficulty ordering based on section progression.
+
+**Language:** Write the scope paragraph and any narrative topic-tree titles in `$INTERFACE_LANG`; keep `§`/`Ch` anchors, table headers, `Pk`/tier markers, and file paths verbatim (per Output language above).
+
+Required structure (anchors must be verbatim for downstream tools):
+
+```markdown
+## Scope
+<scope paragraph>
+
+## Topic tree
+- §X …
+  - §X.Y …
+```
+
+## Step 2 (Reduce) — Generate `course-index/patterns.md`
+
+Aggregate `key_moves` from all partial indexes. Group by move name. A pattern qualifies if it appears in ≥2 distinct `problem_id` values across all files. Assign sequential IDs P1, P2, … (sorted by frequency descending, then alphabetically by name).
+
+Target 15–30 patterns. Each pattern card must use this exact format (anchors are verbatim — `hwmap`, `weakmap`, and `quiz` regex on them):
+
 ```markdown
 ### Pk. <short name>
 **Recognition.** <signal>
@@ -39,13 +181,21 @@ Target 15–30 patterns. Each pattern card:
 **Topic.** <§ numbers>
 ```
 
-A pattern must appear in ≥2 distinct problems to qualify. Otherwise note it as a "one-off technique" in a separate final section of `patterns.md` rather than a numbered pattern.
+**Language:** `Recognition`/`Move`/`Topic` prose in `$INTERFACE_LANG`; the anchors `### Pk.`/`**Recognition.**`/`**Move.**`/`**Appears in.**`/`**Topic.**` and all IDs stay verbatim.
 
-## Step 3: Generate `course-index/coverage.md`
+Moves that appear in only 1 problem are "one-off techniques" — list them in a final section of `patterns.md` after all numbered patterns.
 
-Build forward map (problem → §) and reverse map (§ → problems).
+Do NOT re-read any converted file during this step. Use only the aggregated partial indexes from Step 0.
+
+## Step 3 (Reduce) — Generate `course-index/coverage.md`
+
+Aggregate `problems` from all partial indexes. Build:
+
+- **Forward map** (problem → §): from `primary_§` and `secondary_§` fields.
+- **Reverse map** (§ → problems): group `problems` by `primary_§`, count distinct `problem_id` values as HW density.
 
 For the reverse map, assign the **exam tier from HW density** — the single canonical vocabulary from `skills/course-builder/SKILL.md`, which `hwmap`, `weakmap`, and `alt` regex on (do NOT emit ✅/🔴 "coverage strength" markers; that vocabulary is retired):
+
 - 🔥🔥 Exam-primary (3+ HW instances)
 - 🔥 Exam-likely (2 instances)
 - 🟡 Exam-possible (1 instance)
@@ -53,13 +203,33 @@ For the reverse map, assign the **exam tier from HW density** — the single can
 
 Flag any section that falls in the user's declared weak zones (from `$ARGUMENTS`) with a trailing ` ⚠weak` after its tier (e.g. `⚪ Low-risk ⚠weak`). The flag never upgrades the tier — it only feeds drill-priority ranking.
 
+Required file structure (headers and table headers are verbatim — parsers anchor on them):
+
+```markdown
+## Reverse map: section → exam-probability (from HW density)
+
+| § | Title | HW coverage | Exam tier |
+|---|---|---|---|
+| §X.Y | … | hwN-pM, … | 🔥🔥 Exam-primary |
+…
+
+## Forward map: problem → sections
+…
+```
+
 End the file with a "Recommended drill priority" section ranking the top 6 items by HW density first, `⚠weak` as the tie-breaker within a tier.
+
+**Language:** Section titles and the `Recommended drill priority` prose in `$INTERFACE_LANG`; tier vocabulary (🔥🔥/🔥/🟡/⚪), `⚠weak`, table headers (`§`, `Title`, `HW coverage`, `Exam tier`), and `§`/hw-id stay verbatim.
+
+**Marker normalization:** If a pre-existing `coverage.md` (or partial-merge input) carries retired markers (✅/✅✅/🔴/🔴🔴), emit the row with the canonical tier (✅✅→🔥🔥, ✅→🔥, 🔴→🟡, 🔴🔴→⚪) so the written file contains **only** canonical vocabulary — do NOT preserve retired markers on write.
+
+Do NOT re-read any converted file during this step. Use only the aggregated partial indexes from Step 0.
 
 ## Step 4: Print summary
 
 After writing all three files, print to chat:
 
-Print the block below, with prose written in $INTERFACE_LANG. Token-level identifiers (`course-index/`, `summary.md`, `patterns.md`, `coverage.md`, `P1..P<N>`, `/hwmap`, `/pattern`, `/blind`, `§<weak-§>`, `<hw-id>`) stay verbatim either way:
+Print the block below, with prose written in $INTERFACE_LANG. Token-level identifiers (`course-index/`, `summary.md`, `patterns.md`, `coverage.md`, `P1..P<N>`, `/hwmap`, `/pattern`, `/blind`, `§<weak-§>`, `<hw-id>`) stay verbatim either way. Include a FAILED line for any files that could not be processed:
 
 ```
 course-index/ generated.
@@ -67,6 +237,7 @@ course-index/ generated.
 - summary.md:  <X> sections, <Y> subsections
 - patterns.md: <N> recurring patterns (P1..P<N>), <M> one-off techniques
 - coverage.md: <A> 🔥🔥 exam-primary, <B> 🔥 exam-likely, <C> 🟡, <D> ⚪ (+<W> ⚠weak flags)
+- sub-agents:  <N> files processed, <F> FAILED
 
 Top 3 drill targets (HW-dense first, ⚠weak breaks ties):
   1. <§X> — <title>  [recommend: /blind <hw-id>]

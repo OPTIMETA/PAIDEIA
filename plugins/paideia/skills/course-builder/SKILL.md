@@ -70,7 +70,7 @@ And (in `INTERFACE_LANG` from `.course-meta`, default `en`): "Next: run `/analyz
 
 ## Phase 2: Analyze
 
-This is the core generalization. Given `converted/**/*.md`, produce three index files.
+This is the core generalization. Given `converted/**/*.md` (or a subset selected via `--files=`, `--since=`, or `--lectures-only`), produce three index files. Fan-out agents run in parallel batches sized to the concurrency ceiling (~10 slots); a single sequential pass is forbidden. When a subset is active, the index reflects a partial re-run — existing entries outside the subset are preserved (merged, not overwritten). Each output file is written atomically (`.partial` then rename). The Reduce phase (Steps 1–3 in `analyze.md`) is entered as soon as any batch completes, ensuring partial results survive an interrupted run.
 
 ### `course-index/summary.md`
 
