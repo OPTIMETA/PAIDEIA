@@ -5,7 +5,7 @@ argument-hint: "[--ocr=claude|ollama|tesseract] [optional path to answer file; d
 
 ## Output language
 
-Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output, grade-table commentary, the OCR quality escape-hatch menu — must be in that language. Keep in English regardless: file paths, slash command names (`/paideia:grade`, `/paideia:blind`, …), pattern IDs (P1, P2…), YAML keys, LaTeX, OCR engine names (`claude`, `ollama`, `tesseract`), and the grade table's column headers (`P#`, `Pattern`, `Vars`, `End form`, `Overall`). `vision_ocr.py` reads `INTERFACE_LANG` from `.course-meta` on its own to set the VLM's prose-language rule and the tesseract `lang=` code, so the bash invocations below don't need to pass it explicitly.
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose — chat output, grade-table commentary, the OCR quality escape-hatch menu — must be in that language. Keep in English regardless: file paths, slash command names (`/paideia:grade`, `/paideia:blind`, …), pattern IDs (P1, P2…), YAML keys, LaTeX, OCR engine names (`claude`, `ollama`, `tesseract`), and the grade table's column headers (`P#`, `Pattern`, `Vars`, `SymPy`, `End form`, `Overall`). `vision_ocr.py` reads `INTERFACE_LANG` from `.course-meta` on its own to set the VLM's prose-language rule and the tesseract `lang=` code, so the bash invocations below don't need to pass it explicitly.
 
 Load `skills/vision-ocr/SKILL.md`, `skills/pdf/SKILL.md`, and `skills/answer-processing/SKILL.md`.
 
@@ -118,11 +118,76 @@ Follow the answer-processing skill pipeline:
    - End form (does their final expression structure match?)
    - Completeness (where did they stop?)
 
+4b-pre. **Preflight: symbolic verify availability check.** Before step decomposition, call `verify_tool.py` with a trivial probe (`{"checks":[]}`).
+
+   **If exit 0 (math-verify present):** proceed with `verify_mode: "symbolic+llm"` — no prompt, no action needed.
+
+   **If exit 3 (math-verify absent):** offer a single one-time consent in `$INTERFACE_LANG` **before any grading calculation begins**:
+
+   > (en) "Deterministic verification is not installed. Enable it now for this and future grades? [Y/n] (installs math-verify stack via `/paideia:doctor --install-verify`; this happens BEFORE any grading begins, not mid-run.)"
+   > (ko) "결정론 검산이 미설치입니다. 이번 채점부터 켤까요? [Y/n] (`/paideia:doctor --install-verify` 로 math-verify 스택 설치; **채점 시작 전** 단계에서만 실행되며 채점 도중이 아닙니다.)"
+
+   Wait for user response. Normalize `n`/`no`/`아니오`/`아니요` → skip; **all other input including empty → install** (capital `Y` is the default).
+
+   **If user answers Y (or empty/other):**
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py" --install-verify
+   ```
+   After the install completes, re-probe: call `verify_tool.py` again with `{"checks":[]}`.
+   - If re-probe exits 0: proceed with `verify_mode: "symbolic+llm"` for **this grade run**.
+   - If re-probe still exits 3 (install failed): output one line in `$INTERFACE_LANG`:
+     > (en) "Install failed — proceeding with LLM-only grading. Try `/paideia:doctor --install-verify` later."
+     > (ko) "설치 실패 — LLM 단독 채점으로 진행합니다. 나중에 `/paideia:doctor --install-verify` 로 재시도."
+     Then proceed with `verify_mode: "llm-only"`.
+
+   **If user answers n/no/아니오/아니요 (skip):** output one line in `$INTERFACE_LANG`:
+   > (en) "Deterministic verification skipped — proceeding with LLM-only grading. Enable anytime with `/paideia:doctor --install-verify`."
+   > (ko) "결정론 검산 건너뜀 — LLM 단독 채점으로 진행합니다. 언제든 `/paideia:doctor --install-verify` 로 활성화 가능."
+   Then proceed with `verify_mode: "llm-only"`.
+
+   **no-mid-run-install rule:** Installation is only permitted at this 4b-pre preflight stage — BEFORE step decomposition and grading calculations begin. Once step verification has started (4b), if exit 3 is encountered then, skip symbolic verification for that step and continue with LLM verdict only; do NOT attempt to install mid-run. This preserves result consistency within a single grade run. This preflight output appears above the grade table.
+
+4b. **Step decomposition + per-step verify (checkable steps).**
+
+   Decompose the reference solution and the student's work into a step sequence `s_1..s_n`. Assign each step a `role` (one of: `setup`, `algebra`, `substitution`, `result`, `justification`) and a boolean `checkable` flag. `checkable: true` means the step contains an algebraic equality that SymPy can verify symbolically.
+
+   For every `checkable` step, collect the check tuples `{id, gold, cand, relation}` and call **verify_tool.py in ONE call**:
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/verify_tool.py" <<'JSON'
+   {"checks":[{"id":"s1","gold":"<gold_latex>","cand":"<student_latex>","relation":"eq"},…]}
+   JSON
+   ```
+
+   - `verify_tool.py` reads from stdin and writes `{"results":[{"id":"s1","result":"pass"|"fail"|"timeout"|"unparsable"},…]}` to stdout.
+   - **Exit 3** = math-verify absent → skip symbolic verification entirely, fall back to LLM-only strategy grading (honest demotion, analogous to OCR-tier demotion above). Do NOT install math-verify mid-run; note the demotion in the grade table.
+   - Any other non-zero exit → treat all results as `"unparsable"`.
+
+   **Reconciliation rule (SymPy overrides LLM for checkable steps):**
+   - `result = "pass"` → step verdict = `"correct"` (overrides LLM)
+   - `result = "fail"` → step verdict = `"wrong"` (overrides LLM)
+   - `result = "timeout"` or `"unparsable"` → keep LLM verdict unchanged
+
+   This mirrors the `reconcileStep` rule in `paideia-core/src/reconcile.ts` (W3). The canonical computation is the TS pure function; this prompt instruction is its LLM-facing reflection.
+
+   Non-`checkable` steps are assessed by strategy grading only (pattern match, variable choice, end form, completeness — step 4 below).
+
 5. **Render compact grade table** (≤ 15 lines in chat):
+
+   If `verify_mode == "llm-only"`, output the demotion badge line **above the table** (in $INTERFACE_LANG):
+   - en: `"⚠ Symbolic verification off — LLM-only grading (enable: /paideia:doctor --install-verify)."`
+   - ko: `"⚠ 기호 검산 꺼짐 — LLM 단독 채점 (활성화: /paideia:doctor --install-verify)."`
+
+   Then render the table with the `SymPy` column included (column header stays in English regardless of $INTERFACE_LANG):
    ```
-   | P# | Pattern | Vars | End form | Overall |
-   |---|---|---|---|---|
+   | P# | Pattern | Vars | SymPy | End form | Overall |
+   |---|---|---|---|---|---|
    ```
+
+   SymPy column values (derived from `steps[].sympy.result` in the GRADE_RECORD_JSON — no duplicate source):
+   - `verify_mode == "symbolic+llm"`: for checkable steps, `✓` (pass override) / `✗` (fail override) / `–` (timeout or unparsable, LLM verdict retained); for non-checkable steps, `·`.
+   - `verify_mode == "llm-only"`: entire column is `n/a` for every row.
+
    Plus one closing line (in $INTERFACE_LANG): "Dominant issue: <type>. Next drill: /<command> <target>."
 
 6. **Log errors.** Build the YAML block for every non-✅ entry (canonical schema from answer-processing SKILL.md Step 6), then write it in ONE call through the deterministic writer — it replaces any prior entries for the same source (idempotent re-grades) and schema-validates before writing:
@@ -136,6 +201,51 @@ Follow the answer-processing skill pipeline:
    ```
 
    Never hand-edit `errors/log.md` appends. If a re-grade produced zero errors, run `log_tool.py remove --source="answers/converted/<stem>.md"` instead so stale entries clear.
+
+6b. **Emit machine-readable grade record.**
+
+   Immediately after the `errors/log.md` append in step 6 (and before step 7), emit a machine-readable grade record to stdout using the following **exact** marker fence. The store reads this fence from the transcript to write `drill_attempts` and `decisions` (W4 T-GradeLedgerWrite).
+
+   ```
+   <!-- GRADE_RECORD_JSON -->
+   ```json
+   {
+     "problem_id": "<stem of the answer file>",
+     "ocr_tier": "<tier string from the TIER header>",
+     "verify_mode": "<symbolic+llm | llm-only>",
+     "pattern_expected": ["<P#>", …],
+     "steps": [
+       {
+         "idx": 1,
+         "latex": "<step expression>",
+         "role": "setup|algebra|substitution|result|justification",
+         "checkable": true|false,
+         "sympy": { "checked": true, "relation": "eq", "gold_ref": "<gold>", "result": "pass|fail|timeout|unparsable" },
+         "verdict": "correct|wrong|unclear",
+         "confidence": 0.0–1.0,
+         "error_type": <one of "pattern-missed"|"wrong-variable"|"wrong-end-form"|"algebraic"|"sign"|"definition", or JSON null for correct steps>,
+         "note": "<optional>"
+       }
+     ],
+     "first_wrong_step_idx": <integer or null>,
+     "final_answer": { "latex": "<student>", "gold": "<reference>", "equivalent": true|false },
+     "partial_credit": { "scale": "0-5", "score": <integer 0-5>, "rubric_hits": [] },
+     "verdict": "PASS|PARTIAL|FAIL",
+     "dominant_error": <error_type token in quotes, or JSON null>,
+     "human_review": false
+   }
+   ```
+   <!-- /GRADE_RECORD_JSON -->
+   ```
+
+   Rules:
+   - `steps[].error_type` reuses the 6-type canonical enum (same tokens as `errors/log.md`, `init-course.md`, and `answer-processing/SKILL.md`): `pattern-missed`, `wrong-variable`, `wrong-end-form`, `algebraic`, `sign`, `definition`. For correct steps use the JSON literal `null` (unquoted). The quoted string `"null"` is NOT a valid token — emit `"error_type": null`, never `"error_type": "null"`. This keeps weakmap histograms from `errors/log.md` and from grade records aligned. Same rule for `dominant_error`.
+   - `first_wrong_step_idx`: 1-based index of the earliest `"wrong"` step after reconciliation, or `null` if all steps are correct (ProcessBench all-correct signal, 03 §1.4).
+   - `verify_mode`: `"symbolic+llm"` if verify_tool.py ran without exit 3; `"llm-only"` if exit 3 (math-verify absent).
+   - `sympy` key is **absent** for non-checkable steps or when `verify_mode="llm-only"`.
+   - The `verify_mode` value (`"symbolic+llm"` or `"llm-only"`) is derived from the 4b-pre preflight: it reflects `verify_reachable` as reported by `doctor --json`, and is consumed here and in step 5's SymPy column and demotion badge.
+   - This marker and its schema are a **new additive anchor** (`<!-- GRADE_RECORD_JSON -->`). It does NOT replace the 6-key `errors/log.md` contract, `PATTERN_RX`, existing anchors, or `log_tool.py` idempotency — those remain unchanged.
+   - No new Python or JS dependencies: `verify_tool.py` is the W1-vendored tool reused as-is.
 
 ### Human override — correcting a misgrade (오채점 정정)
 

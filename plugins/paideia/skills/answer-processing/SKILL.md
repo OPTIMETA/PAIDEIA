@@ -88,11 +88,15 @@ For each problem/part, produce a verdict:
 - problem_id: <id>
   pattern: <Pk>
   error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
+  phase: reading | comprehension | transformation | execution | encoding   # optional (F2) — inferred from error_type when absent
+  nature: slip | misconception | gap   # optional (F3) — inferred from error_type when absent
   summary: "<1 line>"
   source: answers/converted/<name>.md
   date: <ISO>
   overridden_by: <source>   # optional — present only on entries superseded by a human override
 ```
+
+Only `problem_id`, `pattern`, `error_type`, `summary`, `source`, `date` are required (the six `REQUIRED_KEYS` `log_tool.py` enforces). `phase`, `nature`, and `overridden_by` are optional additive keys — omit them and downstream readers promote `phase`/`nature` from `error_type` via `DEFAULT_PHASE`/`DEFAULT_NATURE` (`paideia_lib.iter_error_entries`); write them explicitly only when the grading determined a phase/nature that differs from the inferred default.
 
 **Write through `log_tool.py` — never hand-edit the log.** Build the YAML
 block for every non-✅ entry of this grading, then make ONE call:

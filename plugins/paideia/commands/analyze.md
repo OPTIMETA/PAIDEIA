@@ -45,6 +45,29 @@ Batch M/K (files a..b)
 
 Stream this header immediately before spawning each batch's agents.
 
+**Batch-commit (mandatory — run after every batch completes, before spawning the next):**
+
+After all agents in batch M return (succeeded or marked FAILED), and before spawning batch M+1, execute the Reduce phase (Steps 1–3) on the **cumulative** partial indexes from batches 1..M and write the three output files atomically:
+
+1. Write `course-index/summary.md.partial`, `course-index/patterns.md.partial`, `course-index/coverage.md.partial` — fully formed files conforming to all anchor contracts.
+2. Rename each `.partial` to its final path (all three renames happen sequentially after all three writes succeed). Never write the final path directly — a reader must never observe a torn or empty file.
+3. In `coverage.md` (the `.partial` before rename), prepend the metadata comment immediately before `## Reverse map …`:
+
+   ```
+   <!-- COVERAGE: files=<K>/<N>, partial=<true|false>, since=<date|->, subset=<glob|-> -->
+   ```
+
+   where K = count of files successfully processed so far across batches 1..M. If K < N set `partial=true`; on the last batch when K = N set `partial=false`.
+
+4. After completing all three renames, stream one progress line to chat (in `$INTERFACE_LANG`, keeping token identifiers verbatim):
+
+   - **en:** `Batch M/K committed (K files/N on disk)`
+   - **ko:** `배치 M/K 커밋 완료 (K/N 파일 디스크 저장됨)`
+
+The batch-commit Reduce is **cumulative**: each re-run merges all partial indexes from batches 1..M using the same merge rules as Step 0.5 (preserve entries outside the current set). Do NOT re-read any converted source file during batch-commit Reduce — use only the partial-index JSON/MD returned by the sub-agents collected so far. This is the same constraint as Steps 2 and 3 below; it prevents context explosion regardless of how many batches have run.
+
+This per-batch commit means an interrupt after batch M always leaves a valid, parseable partial index on disk for batches 1..M. The full-run Steps 1–3 at the end of the document are the **final** execution of this same Reduce, producing `partial=false`.
+
 **Partial-index return schema** (each sub-agent returns JSON or fixed-header MD conforming to this shape):
 
 ```json
@@ -128,23 +151,25 @@ When none of these three flags are present, proceed with the full discovered fil
 
 (where M = total discovered files − files selected for this run; omit the footnote when M = 0).
 
-## Step 0.75 — Partial-commit guarantee
+## Step 0.75 — Partial-commit guarantee (loop contract anchor)
 
-**The Reduce phase (Steps 1–3) must be entered even if not all fan-out agents have completed.** As soon as at least one batch completes and returns a partial index, proceed to Reduce with the collected partial indexes — do not wait indefinitely for lagging agents.
+The Reduce phase (Steps 1–3) must be entered even if not all fan-out agents have completed. The batch-commit mechanism defined in **Step 0** above is the enforcement point of this guarantee. As soon as each batch completes, the Reduce phase writes the accumulated index to disk (`.partial`→rename) **before** the next batch is spawned; the last committed batch therefore always survives an interrupt. Do not wait indefinitely for lagging agents — if a sub-agent does not return by the time its batch window closes, mark it FAILED and proceed to the batch-commit with whatever partial indexes were collected.
 
-If execution is interrupted mid-run (manual kill, harness timeout, or any other cause), the last successfully committed batch's partial indexes must remain on disk. The three output files must be in a parseable state conforming to their anchor contracts (§ headers, table headers, pattern card format) whenever they exist — a reader must never observe a torn or empty file.
+The three output files must be in a parseable state conforming to their anchor contracts (§ headers, table headers, `### Pk.` pattern card format) whenever they exist on disk — a reader must never observe a torn or empty file. This holds for **every batch-commit**, not only the final one.
 
-**Atomic writes:** Write each of the three output files to a `.partial` scratch path first (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`), then rename to the final path. Never write the final path incrementally — a reader must never observe a partial/torn file. (Same rule as `ingest.md` atomic write convention.)
+**Atomic writes:** Write each of the three output files to a `.partial` scratch path first (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`), then rename to the final path (Step 0 batch-commit, step 2). Never write the final path directly — applies to every batch-commit, not only the final write. The convention is `.partial`→rename on all three files in each batch-commit cycle, exactly as specified in Step 0.
 
-**Partial-run metadata comment (optional, additive):** When the run is a subset or partial completion, prepend the following HTML comment to `coverage.md` immediately before the `## Reverse map …` header (this comment is a **selective key** — its absence does not affect any parser; `parseCoverage` skips non-`|`-prefixed lines):
+**Partial-run metadata comment (mandatory on every batch-commit):** This is the same comment written by **Step 0** batch-commit, step 3 — it is written on **every** batch-commit (partial and final), not only on subset runs. Prepend the following HTML comment to `coverage.md` immediately before the `## Reverse map …` header:
 
 ```
 <!-- COVERAGE: files=<A>/<N>, partial=<true|false>, since=<date|->, subset=<glob|-> -->
 ```
 
-where A = files successfully processed, N = total discovered. This comment is **never** treated as a tier row by `parseCoverage`.
+where A = files successfully processed so far, N = total discovered. Written on **every batch-commit** and always present when `coverage.md` exists: `partial=true` while A < N, `partial=false` on the final batch when A = N. The acceptance gate reads this line to confirm `files=A/N` and the `partial` flag, so it must never be omitted. It is nonetheless parser-safe — `parseCoverage` skips non-`|`-prefixed lines, so this comment is **never** treated as a tier row.
 
 ## Step 1 (Reduce) — Generate `course-index/summary.md`
+
+**This Reduce is re-run after every batch (Step 0 batch-commit); on the final batch it produces the complete index with `partial=false`.** Each re-run operates only on the cumulative partial indexes from batches 1..M collected so far — do NOT re-read any converted source file.
 
 Merge the `sections` arrays from all partial indexes. De-duplicate entries with the same anchor (file-order wins). Sort by document order (file order, then section order within file). Cross-reference lecture and textbook section numbering if both are present.
 

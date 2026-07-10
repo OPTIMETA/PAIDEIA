@@ -95,6 +95,44 @@ class TestSeedParity(unittest.TestCase):
         self.assertEqual(heredoc, plib.ERRORS_LOG_SEED,
                          "init-course seed drifted from paideia_lib.ERRORS_LOG_SEED")
 
+    def test_all_errorlog_headers_match_seed(self):
+        """Every errors/log.md in the repo must have a header comment identical
+        to the canonical ERRORS_LOG_SEED header block.  This catches the
+        header/data drift fixed by FND-012 (source key undeclared in header).
+        """
+        # Extract the canonical '<!-- … -->' block from the seed.
+        seed = plib.ERRORS_LOG_SEED
+        s_start = seed.find("<!--")
+        s_end = seed.find("-->", s_start) + 3
+        canonical_header = seed[s_start:s_end]
+
+        def _live_header(text: str) -> str:
+            start = text.find("<!--")
+            if start == -1:
+                return ""
+            end = text.find("-->", start)
+            if end == -1:
+                return ""
+            return text[start:end + 3]
+
+        # Walk repo root + demo-run for all errors/log.md files.
+        repo_root = REPO.parent  # PAIDEIA repo root (one level above PAIDEIA/)
+        offenders = []
+        for log_path in sorted(repo_root.rglob("errors/log.md")):
+            # Skip node_modules or other tooling artefacts.
+            if any(p.name in ("node_modules", ".git", "target") for p in log_path.parents):
+                continue
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+            live = _live_header(text)
+            if live != canonical_header:
+                offenders.append(
+                    f"{log_path.relative_to(repo_root)}: header differs from seed\n"
+                    f"  expected: {canonical_header[:60]!r}…\n"
+                    f"  got:      {live[:60]!r}…"
+                )
+        self.assertEqual(offenders, [],
+                         "errors/log.md header drift detected:\n" + "\n".join(offenders))
+
 
 class TestIngestChunking(unittest.TestCase):
     def test_page_cap_and_padding(self):
@@ -266,6 +304,94 @@ class TestReadmeClaims(unittest.TestCase):
             text = (REPO / name).read_text(encoding="utf-8")
             missing = [s for s in shipped if s not in text]
             self.assertEqual(missing, [], f"{name} What-ships tree missing {missing}")
+
+
+class TestGradeVerifyBadge(unittest.TestCase):
+    """C3 spec-lint: grade.md must expose SymPy column and demotion badge (C2)."""
+
+    def setUp(self):
+        self.grade = (COMMANDS / "grade.md").read_text(encoding="utf-8")
+
+    def test_sympy_column_in_table_header(self):
+        self.assertIn("SymPy", self.grade,
+                      "grade.md table header must include the SymPy column")
+        # Ensure it appears in the markdown table row (pipe-delimited)
+        import re
+        table_line = [l for l in self.grade.splitlines() if "SymPy" in l and "|" in l]
+        self.assertTrue(table_line,
+                        "grade.md must have a pipe-delimited table row containing 'SymPy'")
+
+    def test_grade_consumes_verify_reachable_or_verify_mode(self):
+        has_reachable = "verify_reachable" in self.grade
+        has_mode = "verify_mode" in self.grade
+        self.assertTrue(has_reachable or has_mode,
+                        "grade.md must reference verify_reachable or verify_mode")
+
+    def test_llm_only_demotion_badge_en(self):
+        self.assertIn("Symbolic verification off", self.grade,
+                      "grade.md must include English demotion badge text "
+                      "'Symbolic verification off'")
+
+    def test_llm_only_demotion_badge_ko(self):
+        self.assertIn("기호 검산 꺼짐", self.grade,
+                      "grade.md must include Korean demotion badge text '기호 검산 꺼짐'")
+
+    def test_sympy_in_header_english_fixed_list(self):
+        """L8 English-fixed header list must include SymPy."""
+        self.assertIn("SymPy", self.grade,
+                      "grade.md output-language rule must list SymPy as an English-fixed header")
+
+    def test_opt_out_default_is_capital_Y(self):
+        """4b-pre prompt default must be [Y/n] (capital Y = install), not [y/N]."""
+        self.assertIn("[Y/n]", self.grade,
+                      "grade.md 4b-pre prompt must use [Y/n] (install by default)")
+        # Ensure the old [y/N] opt-in form is gone
+        self.assertNotIn("[y/N]", self.grade,
+                         "grade.md must not contain old [y/N] opt-in form")
+
+
+class TestInitCourseVerifyStep(unittest.TestCase):
+    """C3 spec-lint: init-course.md must contain Step 3b with verify plumbing (C1)."""
+
+    def setUp(self):
+        self.ic = (COMMANDS / "init-course.md").read_text(encoding="utf-8")
+
+    def test_step_3b_present(self):
+        self.assertIn("Step 3b", self.ic,
+                      "init-course.md must contain Step 3b for symbolic grading setup")
+
+    def test_install_verify_flag_referenced(self):
+        self.assertIn("--install-verify", self.ic,
+                      "init-course.md Step 3b must reference --install-verify flag")
+
+    def test_verify_reachable_probe_consumed(self):
+        self.assertIn("verify_reachable", self.ic,
+                      "init-course.md Step 3b must consume verify_reachable from doctor --json")
+
+    def test_opt_out_prompt_en(self):
+        self.assertIn("[Y/n]", self.ic,
+                      "init-course.md Step 3b must have [Y/n] opt-out prompt (en)")
+
+    def test_both_languages_present(self):
+        # en prompt
+        self.assertIn("Symbolic (SymPy) grading is not installed", self.ic,
+                      "init-course.md must have English opt-out prompt text")
+        # ko prompt
+        self.assertIn("기호(SymPy) 검산이 미설치입니다", self.ic,
+                      "init-course.md must have Korean opt-out prompt text")
+
+    def test_nonblocking_on_failure(self):
+        """Step 3b must not block bootstrap on install failure."""
+        self.assertIn("does **not** block", self.ic,
+                      "init-course.md must state that install failure does not block bootstrap")
+
+    def test_skip_message_en(self):
+        self.assertIn("Skipped — grading will use LLM-only", self.ic,
+                      "init-course.md must have English skip message")
+
+    def test_skip_message_ko(self):
+        self.assertIn("건너뜀 —", self.ic,
+                      "init-course.md must have Korean skip message")
 
 
 if __name__ == "__main__":

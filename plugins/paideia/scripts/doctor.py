@@ -48,6 +48,15 @@ import paideia_lib as plib  # noqa: E402  (shared .course-meta parsing)
 
 OLLAMA_MODEL = "qwen3-vl:8b"
 
+# FND-003: 검산 의존성 단일 출처 상수 (check_verify / check_antlr4 / install_verify_deps 공유).
+# 핀 버전은 08 §2.3 문서와 동기화. fix_cmd 조립도 이 상수에서만.
+VERIFY_INSTALL_SPEC = [
+    "math-verify==0.9.0",
+    "latex2sympy2_extended==1.11.0",
+    "sympy",
+    "antlr4-python3-runtime>=4.13",
+]
+
 # Python deps, graded by what actually needs them. The old flat REQUIRED_PY
 # hard-failed on pdfplumber/pypdf — libraries the vision pipeline deliberately
 # abandoned — which contradicted the plugin's own routing decision.
@@ -56,9 +65,19 @@ OLLAMA_MODEL = "qwen3-vl:8b"
 #             and =tesseract; merely useful otherwise.
 #   optional: reportlab (/cheatsheet --pdf only), pypdf + pdfplumber (ad-hoc
 #             merge/split/text-dump work outside the vision pipeline).
+#   verify:   math-verify/sympy/latex2sympy2_extended — optional symbolic mode.
+#             Absent → StudyView/GradeView hide symbolic mode and fall back to
+#             strategy grading (03 §1.6 "정직한 강등"). Never a blocker.
 CORE_PY = ["pdf2image", "PIL"]
 OCR_PY = ["pytesseract"]
 OPTIONAL_PY = ["reportlab", "pypdf", "pdfplumber"]
+VERIFY_PY = ["sympy", "math_verify", "latex2sympy2_extended"]  # 03 §1.6 probe set
+# antlr4-python3-runtime: latex2sympy2_extended의 런타임 의존 (05-5 §A-3).
+# VERIFY_PY와 별도 프로브 — 패키지명이 "antlr4" 임포트와 다름(antlr4-python3-runtime).
+ANTLR4_PY = ["antlr4"]  # pip install antlr4-python3-runtime
+# FND-024: poppler 폴백용 래스터라이저 (BSD-3-Clause/Apache-2.0, AGPL 미포함).
+# 존재 시 poppler 부재를 FAIL → WARN으로 강등.
+RENDER_FALLBACK_PY = ["pypdfium2"]  # pip install pypdfium2
 
 # The exact directory set created by /paideia:init-course Step 4. Kept in sync so
 # `--fix` recreates precisely what bootstrap would have.
@@ -231,12 +250,34 @@ def check_python(engine: str | None) -> list[Result]:
 
 
 def check_poppler() -> Result:
+    """poppler(pdftoppm) 존재 확인.
+
+    FND-024: poppler 부재라도 pypdfium2 폴백 래스터라이저(BSD/Apache)가 존재하면
+    FAIL → WARN으로 강등하고 폴백 안내를 포함. 둘 다 없으면 FAIL 유지.
+    """
     if has_bin("pdftoppm"):
         return Result("poppler", "poppler (pdftoppm)", OK)
+    pdfium_missing = _py_missing(RENDER_FALLBACK_PY)
+    if not pdfium_missing:
+        # poppler 없음이나 pypdfium2 폴백 가능 → WARN
+        return Result(
+            "poppler", "poppler (pdftoppm)", WARN,
+            L(
+                "not found — pypdfium2 fallback renderer active (PDF rendering will work, "
+                "but install poppler for best quality)",
+                "없음 — pypdfium2 폴백 렌더러 활성 (PDF 렌더링 가능하나 "
+                "품질 최적화를 위해 poppler 설치 권장)",
+            ),
+            install_hint("brew install poppler", "sudo apt-get install poppler-utils"),
+        )
     return Result(
         "poppler", "poppler (pdftoppm)", FAIL,
-        L("not found — every OCR engine renders pages with it",
-          "없음 — 모든 OCR 엔진이 페이지 렌더링에 사용"),
+        L(
+            "not found — every OCR engine renders pages with it; "
+            "install pypdfium2 as a fallback or poppler for primary rendering",
+            "없음 — 모든 OCR 엔진이 페이지 렌더링에 사용; "
+            "pypdfium2 폴백 또는 poppler 기본 설치 필요",
+        ),
         install_hint("brew install poppler", "sudo apt-get install poppler-utils"),
     )
 
@@ -281,6 +322,72 @@ def check_tesseract_kor(engine: str | None) -> Result:
           "'kor' 학습 데이터 없음 — 한국어 필기 OCR 실패"),
         install_hint("brew install tesseract-lang",
                      "sudo apt-get install tesseract-ocr-kor"),
+    )
+
+
+def check_verify() -> Result:
+    """Probe sympy + math_verify + latex2sympy2_extended (03 §1.6, gate 4).
+
+    Absence is always WARN, never FAIL: symbolic mode is silently hidden and
+    strategy grading is used instead (honest downgrade).  Install hint pins
+    the versions documented in 08 §2.3 via VERIFY_INSTALL_SPEC (단일 출처).
+    """
+    missing = _py_missing(VERIFY_PY)
+    if not missing:
+        return Result("verify_deps", "verify deps (sympy / math-verify)", OK)
+    detail_en = (
+        f"missing: {', '.join(missing)} — symbolic step verification unavailable; "
+        "StudyView/GradeView will hide symbolic mode and use strategy grading only. "
+        "Run `/paideia:doctor --install-verify` to install with one click."
+    )
+    detail_ko = (
+        f"누락: {', '.join(missing)} — 기호 단계 검증 불가; "
+        "StudyView/GradeView 가 symbolic 모드를 숨기고 전략 채점만 사용. "
+        "`/paideia:doctor --install-verify` 로 원클릭 설치."
+    )
+    # fix_cmd 조립: VERIFY_INSTALL_SPEC 단일 출처 (antlr4 포함)
+    _pip = "python3 -m pip install --break-system-packages --user"
+    _specs = " ".join(f'"{s}"' for s in VERIFY_INSTALL_SPEC)
+    fix_cmd = f"{_pip} {_specs}"
+    return Result(
+        "verify_deps",
+        "verify deps (sympy / math-verify)",
+        WARN,
+        L(detail_en, detail_ko),
+        L(fix_cmd, fix_cmd),
+    )
+
+
+def check_antlr4() -> Result:
+    """Probe antlr4-python3-runtime — latex2sympy2_extended 런타임 의존 (05-5 §A-3).
+
+    latex2sympy2_extended 는 ANTLR4 파서를 런타임에 사용한다. antlr4-python3-runtime이
+    없으면 verify_math.py의 LaTeX 파싱이 실패한다.
+    Absence는 WARN (softVerify=off이면 미사용 경로). install hint는 VERIFY_INSTALL_SPEC 단일 출처.
+    """
+    missing = _py_missing(ANTLR4_PY)
+    if not missing:
+        return Result("antlr4_runtime", "antlr4-python3-runtime", OK)
+    detail_en = (
+        "antlr4-python3-runtime missing — verify_math.py LaTeX parsing unavailable; "
+        "2nd Verification (softVerify) will silently skip. "
+        "Run `/paideia:doctor --install-verify` to install with one click."
+    )
+    detail_ko = (
+        "antlr4-python3-runtime 누락 — verify_math.py LaTeX 파싱 불가; "
+        "2차 검증(softVerify)이 조용히 건너뜀. "
+        "`/paideia:doctor --install-verify` 로 원클릭 설치."
+    )
+    # fix_cmd 조립: VERIFY_INSTALL_SPEC 단일 출처 (antlr4 포함)
+    _pip = "python3 -m pip install --break-system-packages --user"
+    _specs = " ".join(f'"{s}"' for s in VERIFY_INSTALL_SPEC)
+    fix_cmd = f"{_pip} {_specs}"
+    return Result(
+        "antlr4_runtime",
+        "antlr4-python3-runtime",
+        WARN,
+        L(detail_en, detail_ko),
+        L(fix_cmd, fix_cmd),
     )
 
 
@@ -490,6 +597,8 @@ def run_checks(cwd: Path) -> tuple[list[Result], dict[str, str], bool]:
         check_tesseract_kor(engine),
     ]
     results += check_ollama(engine)
+    results.append(check_verify())  # 03 §1.6 symbolic mode probe — always after ollama
+    results.append(check_antlr4())  # 05-5 §A-3: latex2sympy2_extended 런타임 의존
 
     if course_mode:
         results.append(check_course_dirs(cwd))
@@ -504,8 +613,122 @@ def run_checks(cwd: Path) -> tuple[list[Result], dict[str, str], bool]:
 
 
 # --------------------------------------------------------------------------- #
+# FND-003: --install-verify: 동의 기반 검산 의존성 설치
+# --------------------------------------------------------------------------- #
+
+def install_verify_deps() -> dict[str, str]:
+    """VERIFY_INSTALL_SPEC 패키지를 `python3 -m pip install --user --break-system-packages`로
+    설치한다. `--install-verify` 플래그가 명시될 때만 호출된다(동의 게이트).
+
+    반환: L(en, ko) action 딕트 (성공/실패 정직 보고).
+
+    설계 근거:
+    - `sys.executable`로 자기참조 → 새 프로그램 스폰 아님, PROGRAM_ALLOWLIST 불변.
+    - `--user --break-system-packages`: verify_tool.py / grade.md 가 시스템 python3를
+      스폰하는 경로와 일치. venv 부트스트랩은 스폰 경로 불일치로 채택 안 함.
+    - `--fix` 단독은 이 함수를 호출하지 않는다 (기존 "never runs pip" 불변식 유지).
+    """
+    cmd = [sys.executable, "-m", "pip", "install", "--user",
+           "--break-system-packages", *VERIFY_INSTALL_SPEC]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            return L(
+                "installed verify deps: " + ", ".join(VERIFY_INSTALL_SPEC),
+                "검산 의존성 설치 완료: " + ", ".join(VERIFY_INSTALL_SPEC),
+            )
+        else:
+            stderr_snippet = (result.stderr or "")[:200]
+            return L(
+                f"FAILED to install verify deps (exit {result.returncode}): {stderr_snippet}",
+                f"검산 의존성 설치 실패 (exit {result.returncode}): {stderr_snippet}",
+            )
+    except subprocess.TimeoutExpired:
+        return L(
+            "FAILED to install verify deps: pip timed out after 300 s",
+            "검산 의존성 설치 실패: pip 300초 초과",
+        )
+    except Exception as exc:  # noqa: BLE001
+        return L(
+            f"FAILED to install verify deps: {exc}",
+            f"검산 의존성 설치 실패: {exc}",
+        )
+
+
+# --------------------------------------------------------------------------- #
 # --fix: permission-free repairs only
 # --------------------------------------------------------------------------- #
+
+def _extract_header_comment(text: str) -> str:
+    """Return the '<!-- … -->' block from text, or '' if absent."""
+    start = text.find("<!--")
+    if start == -1:
+        return ""
+    end = text.find("-->", start)
+    if end == -1:
+        return ""
+    return text[start:end + 3]
+
+
+def _normalize_log_header(log: Path) -> list[dict[str, str]]:
+    """If log's header comment drifts from ERRORS_LOG_SEED, replace it.
+
+    Only the '<!-- … -->' preamble is rewritten; data entries (everything
+    after the closing '-->') are preserved byte-for-byte. Write is atomic
+    (tmp + os.replace). Returns a list of zero or one action dicts.
+    """
+    import tempfile
+    try:
+        text = log.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    canonical_header = _extract_header_comment(ERRORS_LOG_SEED)
+    live_header = _extract_header_comment(text)
+
+    if live_header == canonical_header:
+        return []  # already correct — nothing to do
+
+    if not live_header:
+        # No header comment at all: prepend seed header before any entries.
+        after_preamble = text
+    else:
+        # Replace existing header in-place; keep everything after the old '-->'
+        end = text.find("-->") + 3
+        after_preamble = text[end:]
+
+    # Rebuild: canonical preamble (ERRORS_LOG_SEED, which ends with '-->\n') +
+    # the original post-'-->' bytes. The old '-->' line's own trailing newline
+    # is already supplied by the seed's trailing '\n', so strip exactly ONE
+    # leading newline from the retained data — not all of them. lstrip('\n')
+    # would collapse the blank-line separator that a fresh seed+append keeps
+    # between '-->' and the first '- problem_id:' entry (\n\n), producing a
+    # body layout that differs from a freshly seeded file; stripping a single
+    # newline preserves that exact separator, so normalization is a pure header
+    # replacement (the entry region is byte-identical before and after).
+    if after_preamble.startswith("\n"):
+        after_preamble = after_preamble[1:]
+    new_text = ERRORS_LOG_SEED + after_preamble
+
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=log.parent, prefix=".log_hdr_fix_")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(new_text)
+            os.replace(tmp_path, log)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+    except OSError as e:
+        return [L(f"FAILED to normalize errors/log.md header ({e})",
+                  f"errors/log.md 헤더 정규화 실패 ({e})")]
+
+    return [L("normalized errors/log.md header to canonical seed",
+              "errors/log.md 헤더를 정본 시드로 정규화")]
+
 
 def apply_fixes(cwd: Path) -> list[dict[str, str]]:
     actions: list[dict[str, str]] = []
@@ -529,7 +752,7 @@ def apply_fixes(cwd: Path) -> list[dict[str, str]]:
                     actions.append(L(f"FAILED to create {d}/ ({e})",
                                      f"{d}/ 생성 실패 ({e})"))
 
-        # 2. seed errors/log.md
+        # 2. seed or normalize-header errors/log.md
         log = cwd / "errors" / "log.md"
         if not log.is_file():
             try:
@@ -539,6 +762,12 @@ def apply_fixes(cwd: Path) -> list[dict[str, str]]:
             except OSError as e:
                 actions.append(L(f"FAILED to seed errors/log.md ({e})",
                                  f"errors/log.md 시드 실패 ({e})"))
+        else:
+            # Normalize header comment when it drifts from canonical seed.
+            # Data entries (lines after '-->') are preserved byte-for-byte;
+            # only the '<!-- … -->' preamble is replaced. Atomic write (tmp +
+            # os.replace) so a crash mid-write never corrupts the log.
+            actions += _normalize_log_header(log)
     else:
         actions.append(L(
             "skipped workspace repairs — no .course-meta here (global mode); "
@@ -664,11 +893,20 @@ def print_text(results: list[Result], lang: str, course_mode: bool,
 
 def print_json(results: list[Result], meta: dict[str, str], course_mode: bool,
                fixes: list[dict[str, str]] | None) -> None:
+    # verify_reachable: True only when BOTH verify_deps AND antlr4_runtime are OK.
+    # init-course/grade read this single field to decide "symbolic grading reachable"
+    # without parsing individual check entries — decouples callers from check key names.
+    _verify_ok = all(
+        r.status == OK
+        for r in results
+        if r.key in ("verify_deps", "antlr4_runtime")
+    )
     payload = {
         "course_mode": course_mode,
         "overall": overall_status(results),
         "ocr_engine": meta.get("OCR_ENGINE"),
         "interface_lang": meta.get("INTERFACE_LANG"),
+        "verify_reachable": _verify_ok,
         "checks": [r.to_dict() for r in results],
     }
     if fixes is not None:
@@ -681,6 +919,10 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument("--fix", action="store_true",
                     help="apply permission-free repairs, then re-check")
+    ap.add_argument("--install-verify", action="store_true",
+                    help="install symbolic-verification deps (math-verify, sympy, antlr4) "
+                         "via `python3 -m pip install --user --break-system-packages`; "
+                         "requires explicit consent — --fix alone never runs pip")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--lang", default=None, help="override INTERFACE_LANG (en|ko)")
     args = ap.parse_args(argv)
@@ -690,6 +932,11 @@ def main(argv: list[str] | None = None) -> int:
     fixes: list[dict[str, str]] | None = None
     if args.fix:
         fixes = apply_fixes(cwd)
+    # --install-verify: 동의 명시 플래그 시에만 pip 실행 (--fix 단독은 pip 미실행).
+    if args.install_verify:
+        if fixes is None:
+            fixes = []
+        fixes.append(install_verify_deps())
 
     results, meta, course_mode = run_checks(cwd)
 

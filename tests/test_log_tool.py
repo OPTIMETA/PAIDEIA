@@ -98,6 +98,41 @@ class TestValidation(unittest.TestCase):
             self._reject(tmp, "", "no `- problem_id:`")
             self._reject(tmp, entry("c1", "P3", "sign", "chain/x", date="July 5"), "YYYY-MM-DD")
 
+    def test_optional_facets_accepted_when_valid(self):
+        """phase/nature are optional keys documented in the seed header; a present
+        value in the controlled vocab must be accepted and written through."""
+        src = "chain/x"
+        stdin = (
+            "- problem_id: c1\n  pattern: P3\n  error_type: sign\n"
+            "  phase: execution\n  nature: slip\n"
+            f'  summary: "s"\n  source: {src}\n  date: 2026-07-05\n'
+        )
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            r = run_tool(["append", f"--source={src}"], stdin, cwd=tmp)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            text = (tmp / "errors/log.md").read_text(encoding="utf-8")
+            self.assertIn("phase: execution", text)
+            self.assertIn("nature: slip", text)
+
+    def test_optional_facets_rejected_when_out_of_vocab(self):
+        """A present-but-invalid phase or nature value is rejected exactly like a
+        bad error_type (batch writes nothing)."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            bad_phase = (
+                "- problem_id: c1\n  pattern: P3\n  error_type: sign\n"
+                "  phase: bogus-phase\n"
+                '  summary: "s"\n  source: chain/x\n  date: 2026-07-05\n'
+            )
+            self._reject(tmp, bad_phase, "phase 'bogus-phase' not in")
+            bad_nature = (
+                "- problem_id: c1\n  pattern: P3\n  error_type: sign\n"
+                "  nature: bogus-nature\n"
+                '  summary: "s"\n  source: chain/x\n  date: 2026-07-05\n'
+            )
+            self._reject(tmp, bad_nature, "nature 'bogus-nature' not in")
+
     def test_remove(self):
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
@@ -142,6 +177,31 @@ class TestDownstreamCompat(unittest.TestCase):
             live = [b for b in blocks if "overridden_by" not in b]
             self.assertEqual(len(live), 1, "exactly one live (non-overridden) entry expected")
             self.assertIn("definition", live[0])
+
+    def test_no_undeclared_keys_in_written_entries(self):
+        """FND-012 regression: entries written by log_tool must only contain keys
+        declared in the canonical ERRORS_LOG_SEED header (i.e. the 6 REQUIRED_KEYS
+        + optional overridden_by).  phase/nature are reader-derived, never stored.
+        """
+        declared_storage_keys = set(log_tool.REQUIRED_KEYS) | {"overridden_by"}
+        # phase/nature must NOT be stored — they are derived by iter_error_entries.
+        self.assertNotIn("phase", declared_storage_keys)
+        self.assertNotIn("nature", declared_storage_keys)
+
+        src = "answers/converted/hw3.md"
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            run_tool(["append", f"--source={src}"],
+                     entry("hw3-p2", "P6", "sign", src), cwd=tmp)
+            text = (tmp / "errors" / "log.md").read_text(encoding="utf-8")
+            _, blocks = log_tool.split_blocks(text)
+            import re
+            key_rx = re.compile(r"^\s*-?\s*(\w[\w\-]*)\s*:", re.MULTILINE)
+            for block in blocks:
+                found_keys = {m.group(1) for m in key_rx.finditer(block)}
+                undeclared = found_keys - declared_storage_keys
+                self.assertEqual(undeclared, set(),
+                                 f"entry contains undeclared storage keys {undeclared!r}:\n{block}")
 
 
 class TestOverride(unittest.TestCase):

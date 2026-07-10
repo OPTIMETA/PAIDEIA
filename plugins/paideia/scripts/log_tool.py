@@ -104,8 +104,11 @@ def split_blocks(text: str) -> tuple[str, list[str]]:
 
 
 def block_field(block: str, key: str) -> str | None:
+    # Precompiled fast-path for the six REQUIRED_KEYS; build on demand for
+    # optional keys (phase, nature, …) so validation can read them too.
+    rx = _KEY_RX.get(key) or re.compile(rf"^\s*-?\s*{re.escape(key)}\s*:\s*(.+?)\s*$")
     for ln in block.splitlines():
-        m = _KEY_RX[key].match(ln)
+        m = rx.match(ln)
         if m:
             return _unquote(m.group(1))
     return None
@@ -157,6 +160,20 @@ def validate_entries(blocks: list[str], source: str,
             problems.append(
                 f"entry {i}: error_type '{et}' not in "
                 f"{{{' | '.join(sorted(plib.ERROR_TYPES))}}}")
+        # Optional facets (documented in the seed header): validate only when
+        # present. They are NOT required keys — an entry without them is valid
+        # (readers promote phase/nature from error_type). But a *present* value
+        # must be in the controlled vocab, exactly as error_type is.
+        ph = block_field(blk, "phase")
+        if ph is not None and ph not in plib.PHASE_SET:
+            problems.append(
+                f"entry {i}: phase '{ph}' not in "
+                f"{{{' | '.join(sorted(plib.PHASE_SET))}}}")
+        nat = block_field(blk, "nature")
+        if nat is not None and nat not in plib.NATURE_SET:
+            problems.append(
+                f"entry {i}: nature '{nat}' not in "
+                f"{{{' | '.join(sorted(plib.NATURE_SET))}}}")
         dt = block_field(blk, "date")
         if dt is not None and not re.match(r"^\d{4}-\d{2}-\d{2}", dt):
             problems.append(f"entry {i}: date '{dt}' does not start YYYY-MM-DD")

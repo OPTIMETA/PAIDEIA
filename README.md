@@ -509,6 +509,7 @@ PAIDEIA/
         ├── paideia_lib.py               # shared core: .course-meta parsing, D-day math, the phase state machine
         ├── log_tool.py                  # deterministic errors/log.md writer — schema-validated, idempotent per source
         ├── doctor.py                    # /paideia:doctor: install + workspace diagnostic, permission-free --fix
+        ├── verify_tool.py               # /paideia:grade symbolic preflight: LaTeX/SymPy equivalence via math-verify, honest downgrade when absent
         ├── vision_ocr.py                # opt-in: ollama qwen3-vl driver + tesseract forcing, for --ocr=ollama|tesseract
         ├── statusline.py                # emits `paideia · <COURSE> · D-N · <phase> · P<k> ↑` for Claude Code's statusline slot
         └── session_start.py             # SessionStart hook: two-line "phase / top-miss / next command" at the top of every new session

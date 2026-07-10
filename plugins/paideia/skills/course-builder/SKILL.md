@@ -70,7 +70,7 @@ And (in `INTERFACE_LANG` from `.course-meta`, default `en`): "Next: run `/analyz
 
 ## Phase 2: Analyze
 
-This is the core generalization. Given `converted/**/*.md` (or a subset selected via `--files=`, `--since=`, or `--lectures-only`), produce three index files. Fan-out agents run in parallel batches sized to the concurrency ceiling (~10 slots); a single sequential pass is forbidden. When a subset is active, the index reflects a partial re-run — existing entries outside the subset are preserved (merged, not overwritten). Each output file is written atomically (`.partial` then rename). The Reduce phase (Steps 1–3 in `analyze.md`) is entered as soon as any batch completes, ensuring partial results survive an interrupted run.
+This is the core generalization. Given `converted/**/*.md` (or a subset selected via `--files=`, `--since=`, or `--lectures-only`), produce three index files. Fan-out agents run in parallel batches sized to the concurrency ceiling (~10 slots); a single sequential pass is forbidden. When a subset is active, the index reflects a partial re-run — existing entries outside the subset are preserved (merged, not overwritten). The Reduce phase is entered as soon as any batch completes: after **each** batch, the accumulated index is written atomically to disk (`.partial` then rename for all three files) before the next batch spawns, so an interrupt always preserves the last committed batch on disk.
 
 ### `course-index/summary.md`
 

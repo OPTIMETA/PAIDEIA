@@ -505,6 +505,7 @@ PAIDEIA/
         ├── paideia_lib.py               # 공용 코어: .course-meta 파싱, D-day 계산, phase 상태 머신
         ├── log_tool.py                  # errors/log.md 전용 결정론적 기록기 — 스키마 검증, source별 멱등
         ├── doctor.py                    # /paideia:doctor: 설치 + 워크스페이스 진단, 권한 불필요 --fix
+        ├── verify_tool.py               # /paideia:grade 기호 프리플라이트: math-verify로 LaTeX/SymPy 동치 검사, 미설치 시 정직한 다운그레이드
         ├── vision_ocr.py                # 선택적 사용: --ocr=ollama|tesseract 경로에서 쓰는 ollama qwen3-vl + tesseract 드라이버
         ├── statusline.py                # Claude Code statusline 슬롯용 — `paideia · <COURSE> · D-N · <phase> · P<k> ↑`를 출력
         └── session_start.py             # SessionStart 훅: 새 세션 첫머리에 "phase / 최다 실수 / 다음 명령" 2줄 리마인더 출력

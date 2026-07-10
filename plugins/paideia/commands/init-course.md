@@ -113,6 +113,56 @@ Remember the PID and LOG path. Report (in $INTERFACE_LANG):
 - `en`: "ollama model background pull started (PID, ~6 GB, runs in parallel with the metadata prompts)."
 - `ko`: "ollama 모델 백그라운드 pull 시작 (PID, ~6 GB, 메타데이터 입력과 병렬 진행)."
 
+### Step 3b — Symbolic grading availability (ask the user, in $INTERFACE_LANG)
+
+Probe whether symbolic (SymPy) grading is already reachable by running:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py" --json 2>/dev/null \
+  | python3 -c "import sys,json; print('VERIFY_REACHABLE=' + str(json.load(sys.stdin).get('verify_reachable', False)))"
+```
+
+**If `VERIFY_REACHABLE=True`:** Report one line (in $INTERFACE_LANG) and proceed:
+- en: `"Symbolic (SymPy) grading is available — /paideia:grade will use symbolic+llm verification."`
+- ko: `"기호(SymPy) 검산 가용 — /paideia:grade 가 symbolic+llm 검증을 사용합니다."`
+
+**If `VERIFY_REACHABLE=False`:** Show the opt-out prompt (default = install; user must say `n` to skip):
+
+**If `INTERFACE_LANG=en`:**
+
+```
+Symbolic (SymPy) grading is not installed. Install now so grading uses the
+deterministic SymPy backstop? [Y/n]
+(installs math-verify stack via /paideia:doctor --install-verify; ~30s.
+Decline to keep LLM-only grading — you can enable later.)
+```
+
+**If `INTERFACE_LANG=ko`:**
+
+```
+기호(SymPy) 검산이 미설치입니다. 지금 설치해 결정론 SymPy 백스톱으로 채점할까요? [Y/n]
+(/paideia:doctor --install-verify 로 math-verify 스택 설치, ~30초.
+거부 시 LLM 단독 채점 유지 — 나중에 활성화 가능.)
+```
+
+Wait for the answer. Normalize `n`/`no`/`아니오`/`아니요` → skip; **all other input including empty → install** (capital `Y` is the default).
+
+**If user chooses to install:**
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py" --install-verify
+```
+After the install completes, re-run the probe above. Report result in $INTERFACE_LANG:
+- en (success): `"Symbolic (SymPy) grading installed — /paideia:grade will use symbolic+llm verification."`
+- ko (success): `"기호(SymPy) 검산 설치 완료 — /paideia:grade 가 symbolic+llm 검증을 사용합니다."`
+- en (failure): `"Install failed — grading will use LLM-only. You can retry later with /paideia:doctor --install-verify."`
+- ko (failure): `"설치 실패 — LLM 단독 채점으로 진행합니다. 나중에 /paideia:doctor --install-verify 로 재시도 가능."`
+
+Installation failure does **not** block the rest of the bootstrap — continue to Step 4 regardless.
+
+**If user skips (answered `n`/`no`/`아니오`/`아니요`):**
+- en: `"Skipped — grading will use LLM-only until you run /paideia:doctor --install-verify."`
+- ko: `"건너뜀 — /paideia:doctor --install-verify 실행 전까지 LLM 단독 채점을 사용합니다."`
+
 ### Step 4 — Directory skeleton
 
 Create these directories in the user's CWD (idempotent):
@@ -133,10 +183,13 @@ mkdir -p materials/{lectures,textbook,homework,solutions} \
 - problem_id: <id>
   pattern: <Pk>
   error_type: pattern-missed | wrong-variable | wrong-end-form | algebraic | sign | definition
+  phase: reading | comprehension | transformation | execution | encoding   # optional (F2) — inferred from error_type when absent
+  nature: slip | misconception | gap   # optional (F3) — inferred from error_type when absent
   summary: "<1 line>"
   source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
   date: <ISO8601>
   overridden_by: <source>   # optional — present only on entries superseded by a human override
+Only the six keys problem_id/pattern/error_type/summary/source/date are required; phase/nature/overridden_by are optional.
 Write entries via scripts/log_tool.py (idempotent per source) — do not hand-edit appends.
 -->
 EOF
