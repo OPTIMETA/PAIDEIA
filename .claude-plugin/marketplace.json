@@ -9,7 +9,7 @@
       "name": "paideia",
       "source": "./plugins/paideia",
       "description": "Exam-prep workspace for math/physics courses — 18 commands + 6 skills. Every course PDF routes through a parallel vision pipeline (faithful LaTeX, no pdfplumber word-salad). Hand-writing OCR is selectable per course: Claude native vision (default), local Qwen3-VL via Ollama, or Tesseract. Ships a per-course statusline (paideia · COURSE · D-N · phase · Pk ↑) auto-wired by init-course, /paideia:doctor for one-shot install + workspace diagnostics with permission-free --fix, and /paideia:alt to import an OPTIMETA Exam Radar export so lecture-emphasis exam signal folds in beside HW density.",
-      "version": "1.0.0-rc.27",
+      "version": "1.0.0-rc.28",
       "keywords": ["exam-prep", "math", "physics", "ocr", "claude-vision", "vision-pipeline", "statusline"]
     }
   ]

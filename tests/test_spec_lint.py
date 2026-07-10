@@ -460,6 +460,79 @@ class TestGradeVerifyBadge(unittest.TestCase):
         self.assertIn("비대화형 실행에서 기호 검산 자동 설치 실패", self.grade,
                       "grade.md must include Korean headless demotion message")
 
+    def test_sympy_table_header_is_exactly_six_columns(self):
+        """T-GRADE-BADGE-EMIT AC-1: The SymPy table header must be exactly 6 columns in the
+        canonical order P#, Pattern, Vars, SymPy, End form, Overall.
+        A 5-column collapse (SymPy column omitted) must fail this check."""
+        import re
+        # Find the canonical header line (must contain all 6 headers and pipe delimiters)
+        expected = ["P#", "Pattern", "Vars", "SymPy", "End form", "Overall"]
+        header_lines = [
+            l for l in self.grade.splitlines()
+            if "|" in l and "SymPy" in l and "P#" in l and "Pattern" in l
+        ]
+        self.assertTrue(header_lines,
+                        "grade.md must have a pipe-delimited table header row containing P#, Pattern, SymPy")
+        # Check that the first matching header line has exactly the 6 expected columns
+        header = header_lines[0]
+        cells = [c.strip() for c in header.split("|") if c.strip()]
+        self.assertEqual(cells, expected,
+                         f"grade.md table header must be exactly {expected}, got {cells}. "
+                         "A 5-column collapse omitting SymPy is FORBIDDEN.")
+
+    def test_grade_forbids_five_column_collapse(self):
+        """T-GRADE-BADGE-EMIT AC-1: grade.md must explicitly prohibit collapsing to a
+        5-column table or substituting SymPy results with prose."""
+        has_forbidden = "FORBIDDEN" in self.grade
+        self.assertTrue(has_forbidden,
+                        "grade.md must contain 'FORBIDDEN' keyword explicitly prohibiting "
+                        "5-column table collapse or prose substitution of SymPy column")
+        # Also verify that the prohibition mentions the SymPy column context
+        forbidden_idx = self.grade.index("FORBIDDEN")
+        context = self.grade[max(0, forbidden_idx - 200):forbidden_idx + 200]
+        has_five_col = "5-column" in context or "five column" in context.lower() or "prose" in context
+        self.assertTrue(has_five_col,
+                        "The FORBIDDEN clause in grade.md must reference 5-column collapse or prose substitution")
+
+    def test_grade_badge_is_mandatory_not_optional(self):
+        """T-GRADE-BADGE-EMIT AC-2: grade.md 4c must declare badge write as MANDATORY/MUST-EMIT,
+        covering both verify_modes including llm-only."""
+        has_must_emit = "MUST-EMIT" in self.grade or "MANDATORY" in self.grade
+        self.assertTrue(has_must_emit,
+                        "grade.md must contain MUST-EMIT or MANDATORY language making badge write mandatory")
+        # Verify it covers llm-only explicitly
+        self.assertIn("MUST write", self.grade,
+                      "grade.md must include 'MUST write' language for badge file (even for llm-only)")
+        # Verify it requires badge before step 5
+        has_before_step5 = "before rendering the grade table" in self.grade or "before step 5" in self.grade.lower() or "before the grade table" in self.grade
+        self.assertTrue(has_before_step5,
+                        "grade.md must require badge write BEFORE the grade table (step 5)")
+
+    def test_grade_has_badge_selfcheck_gate(self):
+        """T-GRADE-BADGE-EMIT AC-3: grade.md must include a self-check gate that verifies
+        the badge file exists after writing it, using 'test -f' and '.verify.json'."""
+        self.assertIn("test -f", self.grade,
+                      "grade.md must include 'test -f' for badge existence self-check")
+        # The test -f must reference a .verify.json file
+        import re
+        testf_matches = [l for l in self.grade.splitlines() if "test -f" in l and ".verify.json" in l]
+        self.assertTrue(testf_matches,
+                        "grade.md must have a 'test -f ... .verify.json' self-check gate line")
+
+    def test_grade_badge_selfcheck_has_en_ko_warnings(self):
+        """T-GRADE-BADGE-EMIT AC-3 i18n: The badge self-check failure path must have en+ko warning text."""
+        self.assertIn("Badge file write failed", self.grade,
+                      "grade.md must include English badge write failure warning text")
+        self.assertIn("배지 파일 쓰기 실패", self.grade,
+                      "grade.md must include Korean badge write failure warning text")
+
+    def test_grade_single_call_three_views(self):
+        """T-GRADE-BADGE-EMIT AC-4: grade.md must declare that SymPy column, badge checks[],
+        and GRADE_RECORD_JSON steps[].sympy.result all derive from a single verify_tool.py call."""
+        has_single_call = "single" in self.grade.lower() and "three views" in self.grade.lower()
+        self.assertTrue(has_single_call,
+                        "grade.md must state the 'single call, three views' invariant for verify_tool.py results")
+
 
 class TestInitCourseVerifyStep(unittest.TestCase):
     """C3 spec-lint: init-course.md must contain Step 3b with verify plumbing (C1)."""

@@ -245,6 +245,20 @@ Follow the answer-processing skill pipeline:
    - Do NOT write to `answers/_archive/` (gitignored — audit trail would be lost).
    - This is a **new additive anchor** (T-VERIFY-HEADLESS-BUNDLE B4). It does NOT replace the 6-key `errors/log.md` contract, `PATTERN_RX`, `<!-- GRADE_RECORD_JSON -->`, or `log_tool.py` idempotency — those remain unchanged.
 
+   **MUST-EMIT contract (T-GRADE-BADGE-EMIT):** Writing the badge file is **MANDATORY**, not optional. Regardless of `verify_mode` (`symbolic+llm` or `llm-only`), the agent MUST write `answers/converted/<stem>.verify.json` before rendering the grade table (step 5). A `llm-only` run writes `checks: []` and `verify_reachable: false` — an honest record is required even when symbolic verification is unavailable (see Recording rules above: "Even a downgraded run gets an honest on-disk record.").
+
+   **Self-check gate (MUST execute after badge write):** Immediately after the `os.replace` atomic write, verify the file exists:
+
+   ```bash
+   test -f "answers/converted/<stem>.verify.json" || echo "BADGE_WRITE_FAILED: <stem>.verify.json"
+   ```
+
+   If the file is absent after one retry, halt grading and emit a warning to the user in $INTERFACE_LANG before proceeding:
+   - en: `"⚠ Badge file write failed: answers/converted/<stem>.verify.json could not be created. Grading halted. Check filesystem permissions."`
+   - ko: `"⚠ 배지 파일 쓰기 실패: answers/converted/<stem>.verify.json 을 생성할 수 없습니다. 채점을 중단합니다. 파일 시스템 권한을 확인하세요."`
+
+   Skipping the badge write is an **explicit failure path** — it must not silently pass to step 5.
+
 5. **Render compact grade table** (≤ 15 lines in chat):
 
    If `verify_mode == "llm-only"`, output the demotion badge line **above the table** (in $INTERFACE_LANG):
@@ -256,6 +270,12 @@ Follow the answer-processing skill pipeline:
    | P# | Pattern | Vars | SymPy | End form | Overall |
    |---|---|---|---|---|---|
    ```
+
+   **FORBIDDEN: Do NOT collapse to a 5-column table by omitting the SymPy column, and do NOT substitute the SymPy column values with prose sentences.** A 5-column table (P#, Pattern, Vars, End form, Overall) or a prose description of symbolic results in place of the tabular SymPy column is a contract violation. The SymPy column is non-negotiable regardless of verify_mode.
+
+   **Self-check (MUST execute after rendering):** After rendering the table, verify the header row is exactly `| P# | Pattern | Vars | SymPy | End form | Overall |`. If the rendered header does not contain exactly 6 columns in that order, re-render before proceeding. The 6 column-header tokens are English-fixed (per §Output language) — do not translate them.
+
+   **Single-call, three views:** The SymPy column values, the badge `checks[].result`, and `steps[].sympy.result` in GRADE_RECORD_JSON all derive from the **same single `verify_tool.py` call** — no re-calculation, no duplicate source (see step 4c Recording rules).
 
    SymPy column values (derived from `steps[].sympy.result` in the GRADE_RECORD_JSON — no duplicate source):
    - `verify_mode == "symbolic+llm"`: for checkable steps, `✓` (pass override) / `✗` (fail override) / `–` (timeout or unparsable, LLM verdict retained); for non-checkable steps, `·`.
