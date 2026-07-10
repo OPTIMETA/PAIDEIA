@@ -137,6 +137,34 @@ Follow the answer-processing skill pipeline:
 
    Never hand-edit `errors/log.md` appends. If a re-grade produced zero errors, run `log_tool.py remove --source="answers/converted/<stem>.md"` instead so stale entries clear.
 
+### Human override — correcting a misgrade (오채점 정정)
+
+**en:** If the user disputes a verdict ("this was an OCR misread" / "that error classification is wrong"), re-assess the problem and record the correction with `override` instead of `append`. The original verdict is preserved in the log with `overridden_by: <source>` — the audit trail is never destroyed.
+
+**ko:** 사용자가 채점에 이의를 제기하면 ("OCR 오독이었다", "오류 분류가 틀렸다"), 해당 문항을 재평가한 뒤 `append` 대신 `override`로 기록하세요. 원본 평결은 `overridden_by: <source>` 표식과 함께 로그에 **보존**됩니다 — 감사추적이 파괴되지 않습니다.
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/log_tool.py" override \
+     --source="answers/converted/<stem>.md" <<'YAML'
+   - problem_id: <id>
+     pattern: <Pk>
+     error_type: <corrected-type>
+     summary: "<corrected 1-line description>"
+     source: answers/converted/<stem>.md
+     date: <ISO8601>
+   YAML
+   ```
+
+   **en:** Rules:
+   - Use `override` when changing the verdict (different `error_type`, different `pattern`, or new problem discovered). The original entry gets `overridden_by:` and stays in the log. The correction becomes the current verdict.
+   - Use `remove` only when re-grading produced **zero** errors (the problem is now fully correct) — that clears stale entries entirely.
+   - Do NOT include `overridden_by:` in the stdin block — the tool assigns it. Passing it is a validation error.
+
+   **ko:** 규칙:
+   - 평결을 바꿀 때 (`error_type` 변경, `pattern` 변경, 새 오류 발견) → `override` 사용. 원본 엔트리에 `overridden_by:` 가 붙고 로그에 남습니다. 정정본이 현행 평결이 됩니다.
+   - 재채점 결과 오류가 **없어진** 경우에만 `remove` 사용 — 기존 엔트리를 완전히 삭제합니다.
+   - stdin 블록에 `overridden_by:`를 직접 쓰지 마세요 — 도구가 자동 부여합니다. 포함하면 유효성 오류로 거부됩니다.
+
 7. **Do NOT** print the full reference solution. The user can open it themselves if they want to study.
 
 8. **Archive the graded PDF.** After the grade table and the `errors/log.md` append both succeed, move the original PDF out of `answers/` so the next `/paideia:grade` invocation doesn't keep re-picking the same "most recently modified" file when the user uploads a newer scan:

@@ -91,6 +91,7 @@ For each problem/part, produce a verdict:
   summary: "<1 line>"
   source: answers/converted/<name>.md
   date: <ISO>
+  overridden_by: <source>   # optional — present only on entries superseded by a human override
 ```
 
 **Write through `log_tool.py` — never hand-edit the log.** Build the YAML
@@ -123,6 +124,31 @@ every re-grade. (A genuinely new attempt belongs under a new `source:` — a
 new upload gets a new filename, so this only collapses true re-grades of the
 same file.) If a grading produced zero errors on a re-grade, run
 `log_tool.py remove --source=<source>` so the stale entries clear.
+
+**Misgrade correction — origin-preserving override.**
+When a user disputes a verdict (OCR misread, wrong error classification), use
+`log_tool.py override` instead of `append`. The original entries are preserved
+in the log with `overridden_by: <source>` injected after their `date:` line.
+The correction entries are appended as the new current verdict (no marker).
+This is the only path that maintains an audit trail of the original ruling.
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/log_tool.py" override \
+  --source="answers/converted/<name>.md" <<'YAML'
+- problem_id: <id>
+  pattern: <Pk>
+  error_type: <corrected-type>
+  summary: "<corrected 1-line description>"
+  source: answers/converted/<name>.md
+  date: <ISO>
+YAML
+```
+
+Rules: `override` when changing the verdict; `remove` only when the re-grade produced zero
+errors; never include `overridden_by:` in stdin (tool assigns it — passing it is rejected).
+The `weakmap` histogram counts only entries without `overridden_by:` as current verdicts;
+original-marked entries do not double-count. The six required keys and `PATTERN_RX` are
+unchanged — `overridden_by` is an optional additive key, not a seventh required key.
 
 ### Step 7: Render grade summary (chat output)
 

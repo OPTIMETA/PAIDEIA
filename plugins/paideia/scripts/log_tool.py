@@ -22,6 +22,16 @@ learning record. This tool makes the contract code:
     # drop every entry for one source (e.g. a grade issued in error):
     python3 log_tool.py remove --source=<source> [--log=errors/log.md]
 
+    # human override — preserve original verdict, append correction, link with overridden_by:
+    python3 log_tool.py override --source=<source> [--log=errors/log.md] <<'YAML'
+    - problem_id: hw3-p2
+      pattern: P6
+      error_type: definition
+      summary: "corrected: sign error was actually a definition issue"
+      source: answers/converted/hw3.md
+      date: 2026-07-10
+    YAML
+
 Guarantees:
 - Every existing entry whose `source:` equals --source is removed first, then
   the stdin entries are appended — the log stays "latest grading per source".
@@ -31,6 +41,14 @@ Guarantees:
 - The write is atomic (tmp file + os.replace) and utf-8.
 - Preamble (the seed header comment) and entries for other sources are
   preserved byte-for-byte.
+- override: original entries are preserved in the log with `overridden_by: <source>`
+  added (one line injected, six required keys untouched). The correction entries
+  are appended without `overridden_by`. Callers MUST NOT include `overridden_by`
+  in override stdin — the tool assigns it to prevent drift.
+- override idempotency: re-running override on the same source marks only the
+  current "live" entries (those without `overridden_by`); already-marked originals
+  are left unchanged (no duplicate markers). The previous correction becomes the
+  new original-with-marker; the new stdin becomes the current verdict.
 
 Exit codes: 0 = ok, 2 = usage/validation error (nothing written).
 """
@@ -93,12 +111,44 @@ def block_field(block: str, key: str) -> str | None:
     return None
 
 
-def validate_entries(blocks: list[str], source: str) -> list[str]:
-    """Return a list of human-readable problems; empty = valid."""
+_OVERRIDE_KEY_RX = re.compile(r"^\s*overridden_by\s*:", re.IGNORECASE)
+
+
+def block_has_override_marker(block: str) -> bool:
+    """Return True if the block already carries an `overridden_by:` line."""
+    return any(_OVERRIDE_KEY_RX.match(ln) for ln in block.splitlines())
+
+
+def inject_override_marker(block: str, source: str) -> str:
+    """Append `  overridden_by: <source>` after the `date:` line of a block.
+    If `overridden_by` is already present (idempotency), return block unchanged."""
+    if block_has_override_marker(block):
+        return block
+    lines = block.splitlines()
+    for i, ln in enumerate(lines):
+        if re.match(r"^\s*date\s*:", ln):
+            lines.insert(i + 1, f"  overridden_by: {source}")
+            return "\n".join(lines)
+    # date line not found — append at end
+    return block + f"\n  overridden_by: {source}"
+
+
+def validate_entries(blocks: list[str], source: str,
+                     reject_override_key: bool = False) -> list[str]:
+    """Return a list of human-readable problems; empty = valid.
+
+    When `reject_override_key` is True (used by the `override` subcommand),
+    any stdin block that already carries `overridden_by:` is rejected — the
+    tool assigns that marker, not the caller.
+    """
     problems: list[str] = []
     if not blocks:
         problems.append("stdin contained no `- problem_id:` entry blocks")
     for i, blk in enumerate(blocks, 1):
+        if reject_override_key and block_has_override_marker(blk):
+            problems.append(
+                f"entry {i}: `overridden_by:` must not appear in override stdin — "
+                "the tool assigns this marker to prevent drift")
         for k in REQUIRED_KEYS:
             if block_field(blk, k) is None:
                 problems.append(f"entry {i}: missing key `{k}:`")
@@ -116,6 +166,63 @@ def validate_entries(blocks: list[str], source: str) -> list[str]:
                 f"entry {i}: source '{src}' != --source '{source}' "
                 "(every entry in one append must belong to the source being replaced)")
     return problems
+
+
+def apply_override(log_path: Path, source: str,
+                   correction_blocks: list[str]) -> tuple[int, int, int]:
+    """Mark existing blocks for `source` with `overridden_by`, then append corrections.
+
+    Original entries are preserved with `overridden_by: <source>` injected after
+    their `date:` line. Blocks that already carry the marker are left unchanged
+    (idempotency — re-running override never adds duplicate markers). The
+    correction blocks are appended as the new current verdict (no marker).
+
+    Write is atomic (tmp + os.replace), utf-8.
+
+    Returns (marked_count, already_marked_count, appended_count).
+    """
+    if log_path.exists():
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        text = plib.ERRORS_LOG_SEED
+    preamble, blocks = split_blocks(text)
+
+    marked = 0
+    already_marked = 0
+    out_blocks: list[str] = []
+    for blk in blocks:
+        if block_field(blk, "source") == source:
+            if block_has_override_marker(blk):
+                # Already marked in a previous override run — leave as-is.
+                already_marked += 1
+                out_blocks.append(blk.rstrip())
+            else:
+                # Live entry for this source — mark it as overridden.
+                out_blocks.append(inject_override_marker(blk.rstrip(), source))
+                marked += 1
+        else:
+            out_blocks.append(blk.rstrip())
+
+    out_blocks.extend(b.rstrip() for b in correction_blocks)
+
+    parts = [preamble.rstrip("\n")]
+    if out_blocks:
+        parts.append("\n".join(out_blocks))
+    out_text = "\n\n".join(p for p in parts if p) + "\n"
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(log_path.parent), prefix=".log_tool-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(out_text)
+        os.replace(tmp, log_path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return marked, already_marked, len(correction_blocks)
 
 
 def rewrite(log_path: Path, source: str, new_blocks: list[str]) -> tuple[int, int]:
@@ -152,9 +259,9 @@ def rewrite(log_path: Path, source: str, new_blocks: list[str]) -> tuple[int, in
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if not argv or argv[0] not in ("append", "remove"):
+    if not argv or argv[0] not in ("append", "remove", "override"):
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
-        print("usage: log_tool.py append|remove --source=<source> [--log=<path>]",
+        print("usage: log_tool.py append|remove|override --source=<source> [--log=<path>]",
               file=sys.stderr)
         return 2
     cmd = argv[0]
@@ -180,6 +287,22 @@ def main(argv: list[str] | None = None) -> int:
 
     stdin_text = sys.stdin.read()
     _, new_blocks = split_blocks(stdin_text)
+
+    if cmd == "override":
+        problems = validate_entries(new_blocks, source, reject_override_key=True)
+        if problems:
+            for p in problems:
+                print(f"error: {p}", file=sys.stderr)
+            print("log_tool: nothing written", file=sys.stderr)
+            return 2
+        marked, already_marked, appended = apply_override(log_path, source, new_blocks)
+        preserved = marked + already_marked
+        print(f"log_tool: overrode {marked} entr{'y' if marked == 1 else 'ies'} "
+              f"({preserved} preserved as overridden) → appended {appended} "
+              f"for source '{source}' in {log_path}")
+        return 0
+
+    # cmd == "append"
     problems = validate_entries(new_blocks, source)
     if problems:
         for p in problems:

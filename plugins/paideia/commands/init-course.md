@@ -136,6 +136,7 @@ mkdir -p materials/{lectures,textbook,homework,solutions} \
   summary: "<1 line>"
   source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
   date: <ISO8601>
+  overridden_by: <source>   # optional — present only on entries superseded by a human override
 Write entries via scripts/log_tool.py (idempotent per source) — do not hand-edit appends.
 -->
 EOF

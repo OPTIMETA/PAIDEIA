@@ -27,6 +27,10 @@ ERROR_TYPES = {
     "algebraic", "sign", "definition",
 }
 
+# Optional key added by `log_tool.py override` to mark a superseded entry.
+# It is NOT part of REQUIRED_KEYS — existing append/remove callers are unaffected.
+OVERRIDE_KEY = "overridden_by"
+
 # Seed for errors/log.md — the same text init-course Step 4 writes and doctor
 # --fix restores, so /grade and /weakmap always find the schema they expect.
 ERRORS_LOG_SEED = """# Error log
@@ -38,6 +42,7 @@ ERRORS_LOG_SEED = """# Error log
   summary: "<1 line>"
   source: <answers/converted/<name>.md | blind/<id> | chain/<ts>>
   date: <ISO8601>
+  overridden_by: <source>   # optional — present only on entries superseded by a human override
 Write entries via scripts/log_tool.py (idempotent per source) — do not hand-edit appends.
 -->
 """

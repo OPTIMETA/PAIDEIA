@@ -217,6 +217,40 @@ class TestAnalyzeFanOut(unittest.TestCase):
                       "analyze.md must note that token identifiers stay verbatim")
 
 
+class TestLogToolOverride(unittest.TestCase):
+    """Pin the override contract so prose specs can't silently lose the feature."""
+
+    def test_grade_md_has_override_verb(self):
+        text = (COMMANDS / "grade.md").read_text(encoding="utf-8")
+        self.assertIn("override", text,
+                      "grade.md must document the override subcommand")
+        self.assertIn("overridden_by", text,
+                      "grade.md must mention the overridden_by marker")
+
+    def test_answer_processing_skill_has_override_verb(self):
+        text = (SKILLS / "answer-processing" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("override", text,
+                      "answer-processing/SKILL.md must document the override subcommand")
+        self.assertIn("overridden_by", text,
+                      "answer-processing/SKILL.md must mention the overridden_by marker")
+
+    def test_paideia_lib_has_override_key_constant(self):
+        text = (SCRIPTS / "paideia_lib.py").read_text(encoding="utf-8")
+        self.assertIn("OVERRIDE_KEY", text,
+                      "paideia_lib.py must define OVERRIDE_KEY constant")
+        self.assertIn("overridden_by", text,
+                      "paideia_lib.py must reference overridden_by in ERRORS_LOG_SEED")
+
+    def test_six_required_keys_unchanged(self):
+        """REQUIRED_KEYS in log_tool must still be the original six — override_key is optional."""
+        import log_tool
+        self.assertEqual(set(log_tool.REQUIRED_KEYS),
+                         {"problem_id", "pattern", "error_type", "summary", "source", "date"},
+                         "REQUIRED_KEYS must remain the canonical 6 keys")
+        self.assertNotIn("overridden_by", log_tool.REQUIRED_KEYS,
+                         "overridden_by must NOT be a required key")
+
+
 class TestReadmeClaims(unittest.TestCase):
     """Facts the READMEs state about the repo must match the repo."""
 
