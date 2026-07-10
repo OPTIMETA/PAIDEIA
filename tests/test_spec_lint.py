@@ -423,6 +423,41 @@ class TestGradeVerifyBadge(unittest.TestCase):
         self.assertNotIn("[y/N]", self.grade,
                          "grade.md must not contain old [y/N] opt-in form")
 
+    def test_grade_4bpre_has_tty_branch(self):
+        """B1: grade.md 4b-pre must contain the non-interactive auto-provision path."""
+        self.assertIn("--ensure-verify", self.grade,
+                      "grade.md 4b-pre must reference --ensure-verify for headless auto-provisioning")
+        # Must have either 'test -t 0' or 'non-interactive' phrasing
+        has_tty_check = ("test -t 0" in self.grade or "non-interactive" in self.grade
+                         or "Non-interactive" in self.grade)
+        self.assertTrue(has_tty_check,
+                        "grade.md 4b-pre must document the TTY/non-interactive branch gate")
+
+    def test_grade_writes_verify_badge_file(self):
+        """B3: grade.md must document per-step SymPy badge file at answers/converted/<stem>.verify.json."""
+        self.assertIn(".verify.json", self.grade,
+                      "grade.md must reference the .verify.json per-step badge file")
+        self.assertIn("answers/converted", self.grade,
+                      "grade.md must write the badge to answers/converted/ directory")
+
+    def test_verify_badge_is_additive_anchor(self):
+        """B4: grade.md must state the badge is additive and does not replace existing contracts."""
+        self.assertIn("additive", self.grade,
+                      "grade.md must declare the verify badge file as a new additive anchor")
+        # The badge must not be claimed to replace GRADE_RECORD_JSON
+        self.assertIn("GRADE_RECORD_JSON", self.grade,
+                      "grade.md must still reference GRADE_RECORD_JSON anchor (not replaced)")
+
+    def test_grade_headless_demotion_badge_en(self):
+        """B1: grade.md must include the headless-specific demotion badge text (en)."""
+        self.assertIn("Symbolic verify auto-provision failed in non-interactive run", self.grade,
+                      "grade.md must include English headless demotion message")
+
+    def test_grade_headless_demotion_badge_ko(self):
+        """B1: grade.md must include the headless-specific demotion badge text (ko)."""
+        self.assertIn("비대화형 실행에서 기호 검산 자동 설치 실패", self.grade,
+                      "grade.md must include Korean headless demotion message")
+
 
 class TestInitCourseVerifyStep(unittest.TestCase):
     """C3 spec-lint: init-course.md must contain Step 3b with verify plumbing (C1)."""
@@ -466,6 +501,20 @@ class TestInitCourseVerifyStep(unittest.TestCase):
     def test_skip_message_ko(self):
         self.assertIn("건너뜀 —", self.ic,
                       "init-course.md must have Korean skip message")
+
+    def test_initcourse_step3b_has_tty_branch(self):
+        """D1: init-course.md Step 3b must have non-interactive auto-provisioning path."""
+        self.assertIn("--ensure-verify", self.ic,
+                      "init-course.md Step 3b must reference --ensure-verify for headless path")
+        has_tty = ("test -t 0" in self.ic or "non-interactive" in self.ic
+                   or "Non-interactive" in self.ic)
+        self.assertTrue(has_tty,
+                        "init-course.md Step 3b must document TTY/non-interactive branch")
+        # en/ko prompts must still be present (preserved for TTY sessions)
+        self.assertIn("Symbolic (SymPy) grading is not installed", self.ic,
+                      "init-course.md must retain English opt-out prompt for TTY path")
+        self.assertIn("기호(SymPy) 검산이 미설치입니다", self.ic,
+                      "init-course.md must retain Korean opt-out prompt for TTY path")
 
 
 if __name__ == "__main__":

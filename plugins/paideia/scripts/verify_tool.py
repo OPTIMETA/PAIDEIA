@@ -15,6 +15,11 @@ Exit codes:
   2 — usage error: stdin is not valid JSON or missing the "checks" key
   3 — math-verify not installed (honest downgrade; caller hides symbolic mode)
 
+Badge consumer: grade.md step 4c writes answers/converted/<stem>.verify.json by
+mapping this stdout `results[]` directly — the badge `checks[].result` and
+GRADE_RECORD_JSON `steps[].sympy.result` both source from the same single call here.
+(T-VERIFY-HEADLESS-BUNDLE C1)
+
 Asymmetry rule: verify(gold, cand) — gold is ALWAYS parsed first. This is
 locked here so callers cannot accidentally swap operands.  (03 §1.6 D5)
 

@@ -126,7 +126,21 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py" --json 2>/dev/null \
 - en: `"Symbolic (SymPy) grading is available — /paideia:grade will use symbolic+llm verification."`
 - ko: `"기호(SymPy) 검산 가용 — /paideia:grade 가 symbolic+llm 검증을 사용합니다."`
 
-**If `VERIFY_REACHABLE=False`:** Show the opt-out prompt (default = install; user must say `n` to skip):
+**If `VERIFY_REACHABLE=False`:** Apply TTY-branch gate (T-VERIFY-HEADLESS-BUNDLE D1). Determine session interactivity first: the session is **non-interactive** when stdin is not a TTY (`test -t 0` is false) OR when running under `-p` / headless mode.
+
+**Non-interactive path (headless / stdin not a TTY):** Do NOT display the `[Y/n]` prompt. Run auto-provisioner:
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py" --ensure-verify
+```
+After `--ensure-verify` completes, re-run the probe above. Report result in $INTERFACE_LANG:
+- en (success): `"Symbolic (SymPy) grading installed — /paideia:grade will use symbolic+llm verification."`
+- ko (success): `"기호(SymPy) 검산 설치 완료 — /paideia:grade 가 symbolic+llm 검증을 사용합니다."`
+- en (failure): `"Install failed — grading will use LLM-only. You can retry later with /paideia:doctor --install-verify."`
+- ko (failure): `"설치 실패 — LLM 단독 채점으로 진행합니다. 나중에 /paideia:doctor --install-verify 로 재시도 가능."`
+
+Installation failure does **not** block the rest of the bootstrap — continue to Step 4 regardless.
+
+**Interactive path (TTY session):** Show the opt-out prompt (default = install; user must say `n` to skip):
 
 **If `INTERFACE_LANG=en`:**
 

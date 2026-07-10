@@ -122,7 +122,23 @@ Follow the answer-processing skill pipeline:
 
    **If exit 0 (math-verify present):** proceed with `verify_mode: "symbolic+llm"` — no prompt, no action needed.
 
-   **If exit 3 (math-verify absent):** offer a single one-time consent in `$INTERFACE_LANG` **before any grading calculation begins**:
+   **If exit 3 (math-verify absent):** apply TTY-branch gate before any grading calculation begins.
+
+   **TTY-branch gate (T-VERIFY-HEADLESS-BUNDLE B1):** Headless silence = documented default (install). Non-interactive absence of a response is NOT skip — it is the install default.
+
+   First, determine session interactivity. The session is **non-interactive** when stdin is not a TTY (`test -t 0` is false) OR when running under `-p` / headless mode.
+
+   **Non-interactive path (headless, `-p`, stdin not a TTY):** Do NOT display the `[Y/n]` prompt. Run the auto-provisioner immediately:
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.py" --ensure-verify --json
+   ```
+   After `--ensure-verify` completes, re-probe `verify_tool.py` with `{"checks":[]}`.
+   - If re-probe exits 0: proceed with `verify_mode: "symbolic+llm"` for this grade run.
+   - If re-probe still exits 3 (auto-provision failed): output one line in `$INTERFACE_LANG` and proceed with `verify_mode: "llm-only"`:
+     > (en) "Symbolic verify auto-provision failed in non-interactive run — proceeding LLM-only."
+     > (ko) "비대화형 실행에서 기호 검산 자동 설치 실패 — LLM 단독으로 진행."
+
+   **Interactive path (TTY session):** Show the opt-out prompt in `$INTERFACE_LANG` **before any grading calculation begins** (user may explicitly skip):
 
    > (en) "Deterministic verification is not installed. Enable it now for this and future grades? [Y/n] (installs math-verify stack via `/paideia:doctor --install-verify`; this happens BEFORE any grading begins, not mid-run.)"
    > (ko) "결정론 검산이 미설치입니다. 이번 채점부터 켤까요? [Y/n] (`/paideia:doctor --install-verify` 로 math-verify 스택 설치; **채점 시작 전** 단계에서만 실행되며 채점 도중이 아닙니다.)"
@@ -145,7 +161,7 @@ Follow the answer-processing skill pipeline:
    > (ko) "결정론 검산 건너뜀 — LLM 단독 채점으로 진행합니다. 언제든 `/paideia:doctor --install-verify` 로 활성화 가능."
    Then proceed with `verify_mode: "llm-only"`.
 
-   **no-mid-run-install rule:** Installation is only permitted at this 4b-pre preflight stage — BEFORE step decomposition and grading calculations begin. Once step verification has started (4b), if exit 3 is encountered then, skip symbolic verification for that step and continue with LLM verdict only; do NOT attempt to install mid-run. This preserves result consistency within a single grade run. This preflight output appears above the grade table.
+   **no-mid-run-install rule:** Installation / auto-provisioning is only permitted at this 4b-pre preflight stage — BEFORE step decomposition and grading calculations begin. Once step verification has started (4b), if exit 3 is encountered then, skip symbolic verification for that step and continue with LLM verdict only; do NOT attempt to install mid-run. This preserves result consistency within a single grade run. This preflight output appears above the grade table.
 
 4b. **Step decomposition + per-step verify (checkable steps).**
 
@@ -171,6 +187,63 @@ Follow the answer-processing skill pipeline:
    This mirrors the `reconcileStep` rule in `paideia-core/src/reconcile.ts` (W3). The canonical computation is the TS pure function; this prompt instruction is its LLM-facing reflection.
 
    Non-`checkable` steps are assessed by strategy grading only (pattern match, variable choice, end form, completeness — step 4 below).
+
+4c. **Write per-step SymPy verdict badge file** (T-VERIFY-HEADLESS-BUNDLE B3). After step 4b completes and before the grade table (step 5), write `answers/converted/<stem>.verify.json` as an auditable on-disk record of the deterministic backstop state. This file is an additive derived view — it does NOT replace GRADE_RECORD_JSON, `errors/log.md`, or the grade table.
+
+   **Schema (source-of-truth; verify_tool.py stdout `results[]` is the single data source):**
+   ```json
+   {
+     "problem_id": "<stem>",
+     "verify_mode": "symbolic+llm | llm-only",
+     "verify_reachable": true,
+     "generated_at": "<ISO8601>",
+     "checks": [
+       {"idx": 1, "id": "s1", "role": "algebra", "checkable": true,
+        "result": "pass|fail|timeout|unparsable", "verdict": "correct|wrong|unclear"}
+     ],
+     "summary": {"pass": 0, "fail": 0, "timeout": 0, "unparsable": 0, "checkable_total": 0}
+   }
+   ```
+
+   **Recording rules:**
+   - If `verify_mode == "llm-only"`: write `checks: []`, all `summary` fields 0, `verify_reachable: false`. (Even a downgraded run gets an honest on-disk record.)
+   - If `verify_mode == "symbolic+llm"`: map `verify_tool.py` stdout `results[]` directly — no re-calculation. `steps[].sympy.result` in GRADE_RECORD_JSON and the badge `checks[].result` come from the same single verify_tool.py call.
+   - Write atomically (temp file + `os.replace`) to prevent a partial write from corrupting the badge on interrupt. Use heredoc + `python3 -c "import json,os,tempfile,sys,pathlib;..."` pattern:
+
+   ```bash
+   python3 - <<'PY'
+   import json, os, sys, tempfile, pathlib, datetime
+   stem = "<stem>"
+   verify_mode = "<symbolic+llm|llm-only>"
+   verify_reachable = <True|False>
+   checks = [<list from verify_tool.py results, with idx/id/role/checkable/result/verdict added>]
+   summary_counts = {k: sum(1 for c in checks if c.get("result") == k)
+                     for k in ("pass","fail","timeout","unparsable")}
+   summary_counts["checkable_total"] = len([c for c in checks if c.get("checkable")])
+   badge = {
+       "problem_id": stem, "verify_mode": verify_mode,
+       "verify_reachable": verify_reachable,
+       "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+       "checks": checks, "summary": summary_counts,
+   }
+   dest = pathlib.Path(f"answers/converted/{stem}.verify.json")
+   dest.parent.mkdir(parents=True, exist_ok=True)
+   fd, tmp = tempfile.mkstemp(dir=dest.parent, prefix=".verify_badge_")
+   try:
+       with os.fdopen(fd, "w", encoding="utf-8") as fh:
+           json.dump(badge, fh, ensure_ascii=False, indent=2)
+           fh.write("\n")
+       os.replace(tmp, dest)
+   except Exception:
+       try: os.unlink(tmp)
+       except OSError: pass
+       raise
+   PY
+   ```
+   - Idempotent: re-grade overwrites the badge (same stem → same path → atomic replace).
+   - Badge path: `answers/converted/<stem>.verify.json` (alongside the converted MD, in the version-controlled directory for audit trail via git log).
+   - Do NOT write to `answers/_archive/` (gitignored — audit trail would be lost).
+   - This is a **new additive anchor** (T-VERIFY-HEADLESS-BUNDLE B4). It does NOT replace the 6-key `errors/log.md` contract, `PATTERN_RX`, `<!-- GRADE_RECORD_JSON -->`, or `log_tool.py` idempotency — those remain unchanged.
 
 5. **Render compact grade table** (≤ 15 lines in chat):
 

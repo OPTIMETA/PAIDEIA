@@ -613,14 +613,31 @@ def run_checks(cwd: Path) -> tuple[list[Result], dict[str, str], bool]:
 
 
 # --------------------------------------------------------------------------- #
-# FND-003: --install-verify: 동의 기반 검산 의존성 설치
+# FND-003: --install-verify / --ensure-verify: 검산 의존성 설치
 # --------------------------------------------------------------------------- #
 
-def install_verify_deps() -> dict[str, str]:
-    """VERIFY_INSTALL_SPEC 패키지를 `python3 -m pip install --user --break-system-packages`로
-    설치한다. `--install-verify` 플래그가 명시될 때만 호출된다(동의 게이트).
+def verify_reachable_from_results(results: list[Result]) -> bool:
+    """verify_reachable 산출 단일 출처 헬퍼.
 
-    반환: L(en, ko) action 딕트 (성공/실패 정직 보고).
+    True when BOTH verify_deps AND antlr4_runtime are OK.
+    print_json() 과 --ensure-verify 양쪽이 이 함수를 공유하므로 중복 로직이 없다.
+    (T-VERIFY-HEADLESS-BUNDLE A2)
+    """
+    return all(
+        r.status == OK
+        for r in results
+        if r.key in ("verify_deps", "antlr4_runtime")
+    )
+
+
+def install_verify_deps() -> tuple[bool, dict[str, str]]:
+    """VERIFY_INSTALL_SPEC 패키지를 `python3 -m pip install --user --break-system-packages`로
+    설치한다. `--install-verify` 또는 `--ensure-verify` 플래그가 명시될 때만 호출됨.
+
+    반환: (ok: bool, action: L(en,ko) 딕트).
+      ok=True  → 설치 성공 ("installed" 접두 메시지).
+      ok=False → 설치 실패 ("FAILED" 접두 메시지).
+    기존 호출부(:939)는 action 딕트만 소비 — en 문자열 접두("installed"/"FAILED") 불변.
 
     설계 근거:
     - `sys.executable`로 자기참조 → 새 프로그램 스폰 아님, PROGRAM_ALLOWLIST 불변.
@@ -633,26 +650,26 @@ def install_verify_deps() -> dict[str, str]:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
-            return L(
+            return (True, L(
                 "installed verify deps: " + ", ".join(VERIFY_INSTALL_SPEC),
                 "검산 의존성 설치 완료: " + ", ".join(VERIFY_INSTALL_SPEC),
-            )
+            ))
         else:
             stderr_snippet = (result.stderr or "")[:200]
-            return L(
+            return (False, L(
                 f"FAILED to install verify deps (exit {result.returncode}): {stderr_snippet}",
                 f"검산 의존성 설치 실패 (exit {result.returncode}): {stderr_snippet}",
-            )
+            ))
     except subprocess.TimeoutExpired:
-        return L(
+        return (False, L(
             "FAILED to install verify deps: pip timed out after 300 s",
             "검산 의존성 설치 실패: pip 300초 초과",
-        )
+        ))
     except Exception as exc:  # noqa: BLE001
-        return L(
+        return (False, L(
             f"FAILED to install verify deps: {exc}",
             f"검산 의존성 설치 실패: {exc}",
-        )
+        ))
 
 
 # --------------------------------------------------------------------------- #
@@ -896,11 +913,8 @@ def print_json(results: list[Result], meta: dict[str, str], course_mode: bool,
     # verify_reachable: True only when BOTH verify_deps AND antlr4_runtime are OK.
     # init-course/grade read this single field to decide "symbolic grading reachable"
     # without parsing individual check entries — decouples callers from check key names.
-    _verify_ok = all(
-        r.status == OK
-        for r in results
-        if r.key in ("verify_deps", "antlr4_runtime")
-    )
+    # Single source via verify_reachable_from_results() (T-VERIFY-HEADLESS-BUNDLE A2).
+    _verify_ok = verify_reachable_from_results(results)
     payload = {
         "course_mode": course_mode,
         "overall": overall_status(results),
@@ -923,6 +937,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="install symbolic-verification deps (math-verify, sympy, antlr4) "
                          "via `python3 -m pip install --user --break-system-packages`; "
                          "requires explicit consent — --fix alone never runs pip")
+    ap.add_argument("--ensure-verify", action="store_true",
+                    help="idempotent non-interactive provisioning: install verify deps only "
+                         "when verify_reachable is False; no-op when already reachable. "
+                         "Designed for headless (-p) callers that must not stall on a [Y/n]. "
+                         "(T-VERIFY-HEADLESS-BUNDLE A1)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--lang", default=None, help="override INTERFACE_LANG (en|ko)")
     args = ap.parse_args(argv)
@@ -936,7 +955,64 @@ def main(argv: list[str] | None = None) -> int:
     if args.install_verify:
         if fixes is None:
             fixes = []
-        fixes.append(install_verify_deps())
+        _ok, _action = install_verify_deps()
+        fixes.append(_action)
+
+    # --ensure-verify: 비대화형 멱등 프로비저닝 (T-VERIFY-HEADLESS-BUNDLE A1).
+    # 미도달이면 설치 후 재프로브; 이미 도달이면 no-op.
+    # --fix와 독립 플래그 — apply_fixes()는 손대지 않음.
+    _ensure_verify_exit: int | None = None
+    if args.ensure_verify:
+        if fixes is None:
+            fixes = []
+        # 1차 프로브 (설치 전)
+        _pre_results, _pre_meta, _pre_cm = run_checks(cwd)
+        if verify_reachable_from_results(_pre_results):
+            fixes.append(L(
+                "verify deps already reachable — no action",
+                "검산 의존성 이미 도달 — 조치 없음",
+            ))
+            _ensure_verify_exit = 0
+            # No-op path: reuse the pre-probe results for print instead of
+            # re-running run_checks() at :1003 — mirrors the early-return the
+            # install-succeeded branch already uses with _post_results, so the
+            # reachable no-op does a single probe (not two). check_verify/
+            # check_antlr4 imports run once here.
+            results, meta, course_mode = _pre_results, _pre_meta, _pre_cm
+            lang = (args.lang or meta.get("INTERFACE_LANG", "en")).lower()
+            if lang not in VALID_LANGS:
+                lang = "en"
+            if args.json:
+                print_json(results, meta, course_mode, fixes)
+            else:
+                print_text(results, lang, course_mode, fixes)
+            return _ensure_verify_exit
+        else:
+            # 미도달 → 설치 후 재프로브
+            _ok, _action = install_verify_deps()
+            fixes.append(_action)
+            if _ok:
+                # 재프로브: 최종 verify_reachable 반영
+                _post_results, _post_meta, _post_cm = run_checks(cwd)
+                _ensure_verify_exit = 0 if verify_reachable_from_results(_post_results) else 1
+                # 재프로브 결과를 메인 results로 승격
+                # (print_json/print_text 의 verify_reachable 값이 재설치 후를 반영하도록)
+                # 단, 여기선 results를 run_checks 한 번으로만 만들고
+                # payload의 verify_reachable만 갱신하면 충분.
+                # → post_results를 사용한 print를 위해 아래 run_checks를 스킵하는 플래그:
+                # (run_checks 이중 실행을 피하려면 결과를 캐시. 단 --ensure-verify 전용이므로
+                #  이 경로에서 results = _post_results 로 직행.)
+                results, meta, course_mode = _post_results, _post_meta, _post_cm
+                lang = (args.lang or meta.get("INTERFACE_LANG", "en")).lower()
+                if lang not in VALID_LANGS:
+                    lang = "en"
+                if args.json:
+                    print_json(results, meta, course_mode, fixes)
+                else:
+                    print_text(results, lang, course_mode, fixes)
+                return _ensure_verify_exit
+            else:
+                _ensure_verify_exit = 2  # 설치 실패
 
     results, meta, course_mode = run_checks(cwd)
 
@@ -949,6 +1025,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print_text(results, lang, course_mode, fixes)
 
+    if _ensure_verify_exit is not None:
+        return _ensure_verify_exit
     return exit_code(overall_status(results))
 
 

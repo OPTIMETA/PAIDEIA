@@ -296,7 +296,7 @@ class TestVerifyReachable(unittest.TestCase):
 
         import unittest.mock as mock
         with mock.patch("subprocess.run", side_effect=fake_run):
-            result = doctor.install_verify_deps()
+            ok, result = doctor.install_verify_deps()
 
         self.assertEqual(len(captured_calls), 1, "pip install must be called exactly once")
         call = captured_calls[0]
@@ -311,6 +311,7 @@ class TestVerifyReachable(unittest.TestCase):
         for spec in doctor.VERIFY_INSTALL_SPEC:
             self.assertIn(spec, call, f"VERIFY_INSTALL_SPEC entry '{spec}' missing from pip call")
         # Result reports success
+        self.assertTrue(ok, "install_verify_deps must return ok=True on success")
         self.assertIn("installed", result.get("en", ""))
 
     def test_fix_alone_never_runs_pip(self):
@@ -368,6 +369,160 @@ class TestVerifyReachable(unittest.TestCase):
         self.assertFalse(payload.get("available"), "available must be false when math-verify absent")
         self.assertEqual(payload.get("results"), [],
                          "results must be [] when math-verify absent")
+
+
+class TestEnsureVerify(unittest.TestCase):
+    """T-VERIFY-HEADLESS-BUNDLE A1/A2/A3: --ensure-verify flag and verify_reachable_from_results."""
+
+    def _make_results(self, verify_status: str, antlr4_status: str) -> list:
+        return [
+            doctor.Result("verify_deps", "verify deps", verify_status),
+            doctor.Result("antlr4_runtime", "antlr4-python3-runtime", antlr4_status),
+            doctor.Result("poppler", "poppler", doctor.OK),
+        ]
+
+    def test_verify_reachable_helper_single_source(self):
+        """A2: verify_reachable_from_results() is the single source — matches print_json output."""
+        import io, contextlib
+        ok_results = self._make_results(doctor.OK, doctor.OK)
+        # Helper
+        helper_val = doctor.verify_reachable_from_results(ok_results)
+        # print_json
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            doctor.print_json(ok_results, {}, False, None)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(helper_val, payload["verify_reachable"],
+                         "verify_reachable_from_results() must agree with print_json verify_reachable")
+
+    def test_verify_reachable_helper_false_when_warn(self):
+        """A2: helper returns False when either check is WARN."""
+        self.assertFalse(doctor.verify_reachable_from_results(
+            self._make_results(doctor.WARN, doctor.OK)))
+        self.assertFalse(doctor.verify_reachable_from_results(
+            self._make_results(doctor.OK, doctor.WARN)))
+
+    def test_ensure_verify_noop_when_reachable(self):
+        """A1: --ensure-verify calls pip 0 times when verify_reachable is already True."""
+        pip_calls = []
+
+        def spy_run(cmd, **kwargs):
+            if isinstance(cmd, list) and "pip" in " ".join(str(c) for c in cmd):
+                pip_calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+        import unittest.mock as mock
+
+        ok_results = self._make_results(doctor.OK, doctor.OK)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            # Patch run_checks to return already-reachable results so pip is never called.
+            with mock.patch.object(doctor, "run_checks",
+                                   return_value=(ok_results, {}, False)), \
+                 mock.patch("subprocess.run", side_effect=spy_run):
+                rc = doctor.main(["--ensure-verify", "--json"])
+
+        self.assertEqual(pip_calls, [],
+                         "--ensure-verify must not call pip when verify_reachable is already True")
+
+    def test_ensure_verify_installs_when_absent(self):
+        """A1: --ensure-verify calls pip exactly once when verify_reachable is False."""
+        pip_calls = []
+        absent_results = self._make_results(doctor.WARN, doctor.WARN)
+
+        def spy_run(cmd, **kwargs):
+            if isinstance(cmd, list) and "pip" in " ".join(str(c) for c in cmd):
+                pip_calls.append(list(cmd))
+                return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+            # _py_missing probes
+            return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="")
+
+        import unittest.mock as mock
+        call_count = [0]
+
+        def fake_run_checks(cwd):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # 1st probe: absent
+                return (absent_results, {}, False)
+            else:
+                # 2nd probe (re-probe after install): reachable
+                return (self._make_results(doctor.OK, doctor.OK), {}, False)
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with mock.patch.object(doctor, "run_checks", side_effect=fake_run_checks), \
+                 mock.patch("subprocess.run", side_effect=spy_run):
+                doctor.main(["--ensure-verify", "--json"])
+
+        self.assertEqual(len(pip_calls), 1,
+                         "--ensure-verify must call pip exactly once when absent")
+        call = pip_calls[0]
+        self.assertIn("--user", call)
+        self.assertIn("--break-system-packages", call)
+        for spec in doctor.VERIFY_INSTALL_SPEC:
+            self.assertIn(spec, call,
+                          f"VERIFY_INSTALL_SPEC entry '{spec}' missing from pip call")
+
+    def test_ensure_verify_reprobes_and_reports(self):
+        """A3: payload verify_reachable reflects re-probe result after install."""
+        import io, contextlib
+        import unittest.mock as mock
+
+        absent_results = self._make_results(doctor.WARN, doctor.WARN)
+        reachable_results = self._make_results(doctor.OK, doctor.OK)
+        call_count = [0]
+
+        def fake_run_checks(cwd):
+            call_count[0] += 1
+            return (absent_results, {}, False) if call_count[0] == 1 else (reachable_results, {}, False)
+
+        def fake_subprocess(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+        buf = io.StringIO()
+        with mock.patch.object(doctor, "run_checks", side_effect=fake_run_checks), \
+             mock.patch("subprocess.run", side_effect=fake_subprocess), \
+             contextlib.redirect_stdout(buf):
+            doctor.main(["--ensure-verify", "--json"])
+
+        payload = json.loads(buf.getvalue())
+        self.assertIn("verify_reachable", payload,
+                      "--ensure-verify --json payload must contain verify_reachable key")
+        # After successful install + re-probe, reachable_results are used → True
+        self.assertTrue(payload["verify_reachable"],
+                        "verify_reachable must be True after successful re-probe")
+
+    def test_fix_alone_still_never_runs_pip(self):
+        """A1/regression: --fix alone without --ensure-verify must never invoke pip."""
+        pip_calls = []
+
+        def spy_run(cmd, **kwargs):
+            if isinstance(cmd, list) and "pip" in " ".join(str(c) for c in cmd):
+                pip_calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            (tmp / ".course-meta").write_text("COURSE_NAME: X\n", encoding="utf-8")
+            with mock.patch("subprocess.run", side_effect=spy_run):
+                doctor.apply_fixes(tmp)
+
+        self.assertEqual(pip_calls, [],
+                         "--fix alone must never call pip (invariant: no-pip-fix)")
+
+    def test_ensure_verify_end_to_end_smoke(self):
+        """A1/smoke: --ensure-verify --json emits valid JSON with verify_reachable key."""
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS / "doctor.py"), "--ensure-verify", "--json"],
+            capture_output=True, text=True, timeout=60,
+        )
+        # Output must be valid JSON regardless of install success/failure
+        self.assertTrue(result.stdout.strip(), "--ensure-verify --json must produce stdout")
+        payload = json.loads(result.stdout)
+        self.assertIn("verify_reachable", payload,
+                      "--ensure-verify --json output must contain verify_reachable key")
 
 
 if __name__ == "__main__":
