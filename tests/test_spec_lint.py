@@ -254,6 +254,80 @@ class TestAnalyzeFanOut(unittest.TestCase):
         self.assertIn("verbatim", self.analyze,
                       "analyze.md must note that token identifiers stay verbatim")
 
+    # AC-10 — first-batch cap: analyze.md and SKILL.md both anchor the small first-batch rule.
+    def test_first_batch_cap(self):
+        for anchor in ("first batch", "provably commit", "inside the standard window"):
+            self.assertIn(anchor, self.analyze,
+                          f"analyze.md must anchor first-batch cap with phrase '{anchor}'")
+        self.assertIn("first batch", self.skill,
+                      "SKILL.md must describe the small first-batch cap rule")
+        self.assertIn("provably commits inside the window", self.skill,
+                      "SKILL.md must state the first batch provably commits inside the window")
+        # Ban K=8 / T=30 even as defense-in-depth (already covered by AC-7, repeated here).
+        for token in ("K = 8", "T = 30"):
+            self.assertNotIn(token, self.analyze,
+                             f"analyze.md must not contain forked constant '{token}'")
+            self.assertNotIn(token, self.skill,
+                             f"SKILL.md must not contain forked constant '{token}'")
+
+    # AC-11 — resume entry-point: argument-hint and body both carry --resume; force/resume exclusion stated.
+    def test_resume_entrypoint(self):
+        front = self.analyze.split("---", 2)[1]
+        self.assertIn("--resume", front,
+                      "analyze.md argument-hint (front-matter) must include --resume")
+        self.assertIn("--resume", self.analyze,
+                      "analyze.md body must reference --resume")
+        self.assertIn("--force", self.analyze,
+                      "analyze.md must document --force flag")
+        # Mutual-exclusion wording must be present.
+        self.assertIn("mutually exclusive", self.analyze,
+                      "analyze.md must state --force and --resume are mutually exclusive")
+
+    # AC-12 — resume procedure contract: not-yet-processed fan-out, merge, no re-read, partial=false goal.
+    def test_resume_procedure_contract(self):
+        self.assertIn("not-yet-processed", self.analyze,
+                      "analyze.md resume must fan out only not-yet-processed files")
+        self.assertIn("merge", self.analyze,
+                      "analyze.md resume must merge into the existing index (not overwrite)")
+        self.assertIn("do NOT re-read", self.analyze,
+                      "analyze.md resume must forbid re-reading converted source files")
+        self.assertIn("partial=false", self.analyze,
+                      "analyze.md resume must target partial=false as the completion state")
+        self.assertIn("files=A/N", self.analyze,
+                      "analyze.md resume must update files=A/N in the COVERAGE comment")
+
+    # AC-13 — rename completion contract: renames complete before next batch; no orphan .partial.
+    def test_rename_completion_contract(self):
+        # 'before' + 'next batch' must appear together in the rename obligation text.
+        self.assertIn("before", self.analyze,
+                      "analyze.md must state renames complete BEFORE the next batch spawns")
+        self.assertIn("next batch", self.analyze,
+                      "analyze.md must reference 'next batch' in the completion gate")
+        self.assertIn("orphan", self.analyze,
+                      "analyze.md must forbid leaving a .partial orphan (torn-file prevention)")
+        # The .partial write literals must still be present (AC-2 regression guard).
+        for scratch in ("summary.md.partial", "patterns.md.partial", "coverage.md.partial"):
+            self.assertIn(scratch, self.analyze,
+                          f"AC-13 regression: analyze.md must still carry {scratch}")
+
+    # AC-14 — cadence sync: first-batch + resume sentences in SKILL.md; banned strings absent.
+    def test_cadence_sync_first_batch_resume(self):
+        # SKILL.md must carry both new sentences alongside existing cadence anchors.
+        self.assertIn("first batch is capped small", self.skill,
+                      "SKILL.md must carry first-batch cap sentence (cadence sync)")
+        self.assertIn("--resume", self.skill,
+                      "SKILL.md must mention --resume (cadence sync)")
+        # Existing cadence anchors must still be present (regression guard for AC-8).
+        self.assertIn("`.partial`", self.skill,
+                      "SKILL.md cadence anchor `.partial` must still be present")
+        self.assertIn("as soon as any batch completes", self.skill,
+                      "SKILL.md must still carry 'as soon as any batch completes'")
+        # Banned cadence strings must remain absent.
+        self.assertNotIn("After EACH batch completes, all three", self.skill,
+                         "SKILL.md must not contain banned cadence string")
+        self.assertNotIn("after batch 1 completes, immediately write", self.analyze,
+                         "analyze.md must not contain banned cadence string")
+
 
 class TestLogToolOverride(unittest.TestCase):
     """Pin the override contract so prose specs can't silently lose the feature."""

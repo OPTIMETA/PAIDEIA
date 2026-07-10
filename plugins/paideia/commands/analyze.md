@@ -1,6 +1,6 @@
 ---
 description: Analyze converted course materials to produce the course knowledge base — patterns.md, coverage.md, summary.md.
-argument-hint: "[weak-zone topics, comma-separated] [--files=<glob>] [--since=<YYYY-MM-DD>] [--lectures-only] [--force]"
+argument-hint: "[weak-zone topics, comma-separated] [--files=<glob>] [--since=<YYYY-MM-DD>] [--lectures-only] [--resume] [--force]"
 ---
 
 ## Output language
@@ -29,15 +29,17 @@ Analyzing N files (0/N)...
 
 **Fan-out (mandatory — single-pass over the full converted directory is forbidden):**
 
-Spawn one `general-purpose` Task sub-agent **per file**, in parallel, up to the workflow concurrency ceiling (currently ~10 parallel agent slots) at once; batches sized to that ceiling. If N exceeds the ceiling, process in sequential batches each sized to the concurrency ceiling (currently ~10), waiting for each batch to complete before launching the next — maximize parallelism within each batch. Each agent reads only its own single file and returns a **partial index** (structured summary) — it must not re-read or transcribe the full original text back to the parent.
+Spawn one `general-purpose` Task sub-agent **per file**, in parallel, up to the workflow concurrency ceiling (currently ~10 parallel agent slots) at once; batches sized to that ceiling. If N exceeds the ceiling, process in sequential batches, waiting for each batch to complete before launching the next — maximize parallelism within each batch. Each agent reads only its own single file and returns a **partial index** (structured summary) — it must not re-read or transcribe the full original text back to the parent.
+
+**First-batch cap (mandatory — batch-1 must provably commit inside the standard window):** The first batch is intentionally smaller than the full ceiling. Set batch-1 size = min(FIRST_BATCH_CAP, N), where FIRST_BATCH_CAP is 3–4 files. This ensures that fan-out + Reduce + all three `.partial` writes + all three renames provably complete and commit a valid course-index inside the standard window — batch-1 must provably commit a valid course-index inside the standard window; subsequent batches widen to the ceiling (~10). Choosing a ceiling-sized first batch risks a SIGTERM (exit 143) with zero committed files if the Reduce + write phase is reached near the window boundary (as observed in FND-002: "assembling section headers" → SIGTERM, 0 files committed). The small first batch eliminates this risk while the subsequent batches widen to recover throughput.
 
 Before spawning the first batch, output a batch-progress header:
 
 ```
-Batch 1/K (files 1..min(ceiling, N))
+Batch 1/K (files 1..min(FIRST_BATCH_CAP, N))
 ```
 
-where K = ceil(N / ceiling). At the start of each subsequent batch M output:
+where K = ceil((N − min(FIRST_BATCH_CAP, N)) / ceiling) + 1. At the start of each subsequent batch M output:
 
 ```
 Batch M/K (files a..b)
@@ -50,19 +52,19 @@ Stream this header immediately before spawning each batch's agents.
 After all agents in batch M return (succeeded or marked FAILED), and before spawning batch M+1, execute the Reduce phase (Steps 1–3) on the **cumulative** partial indexes from batches 1..M and write the three output files atomically:
 
 1. Write `course-index/summary.md.partial`, `course-index/patterns.md.partial`, `course-index/coverage.md.partial` — fully formed files conforming to all anchor contracts.
-2. Rename each `.partial` to its final path (all three renames happen sequentially after all three writes succeed). Never write the final path directly — a reader must never observe a torn or empty file.
+2. Rename each `.partial` to its final path — all three `.partial` writes MUST complete, then all three renames MUST complete, **before** streaming the batch-commit progress line or spawning the next batch. Rename in deterministic order: `summary.md.partial` → `summary.md`, then `patterns.md.partial` → `patterns.md`, then `coverage.md.partial` → `coverage.md`. Never write the final path directly — a reader must never observe a torn or empty file. Never leave a `.partial` orphan on the final path side: a batch-commit that has written a `.partial` but not renamed is **incomplete** — on the next invocation it is treated as not-yet-committed (see Resume, Step 0.6).
 3. In `coverage.md` (the `.partial` before rename), prepend the metadata comment immediately before `## Reverse map …`:
 
    ```
-   <!-- COVERAGE: files=<K>/<N>, partial=<true|false>, since=<date|->, subset=<glob|-> -->
+   <!-- COVERAGE: files=<A>/<N>, partial=<true|false>, since=<date|->, subset=<glob|-> -->
    ```
 
-   where K = count of files successfully processed so far across batches 1..M. If K < N set `partial=true`; on the last batch when K = N set `partial=false`.
+   where A = count of files successfully processed so far across batches 1..M (the same "already-processed count" slot referred to as A in Step 0.6 Resume and Step 0.75). If A < N set `partial=true`; on the last batch when A = N set `partial=false`.
 
 4. After completing all three renames, stream one progress line to chat (in `$INTERFACE_LANG`, keeping token identifiers verbatim):
 
-   - **en:** `Batch M/K committed (K files/N on disk)`
-   - **ko:** `배치 M/K 커밋 완료 (K/N 파일 디스크 저장됨)`
+   - **en:** `Batch M/K committed (A files/N on disk)`
+   - **ko:** `배치 M/K 커밋 완료 (A/N 파일 디스크 저장됨)`
 
 The batch-commit Reduce is **cumulative**: each re-run merges all partial indexes from batches 1..M using the same merge rules as Step 0.5 (preserve entries outside the current set). Do NOT re-read any converted source file during batch-commit Reduce — use only the partial-index JSON/MD returned by the sub-agents collected so far. This is the same constraint as Steps 2 and 3 below; it prevents context explosion regardless of how many batches have run.
 
@@ -132,7 +134,7 @@ If a sub-agent stops or returns malformed output, mark that file FAILED, continu
 
 ## Step 0.5 — Subset & incremental selection
 
-**Applied after discovery (Step 0 scan) and before fan-out.** Control flags from `$ARGUMENTS` (the `--`-prefixed tokens) filter the discovered file list. Three flags are supported:
+**Applied after discovery (Step 0 scan) and before fan-out.** Control flags from `$ARGUMENTS` (the `--`-prefixed tokens) filter the discovered file list. Four flags are supported (`--resume` is a mode switch, not a subset filter — see Step 0.6):
 
 - **`--files=<glob>`**: intersect the `converted/**` scan result with the provided glob. Files outside the glob are excluded from this run; count them as "outside subset" (see Summary footnote below). The glob is matched against relative paths from the course root (e.g. `--files=lectures/L2{2,3,4}.md`). Neither idempotence nor forced-reconvert logic is altered for matched files.
 
@@ -151,13 +153,63 @@ When none of these three flags are present, proceed with the full discovered fil
 
 (where M = total discovered files − files selected for this run; omit the footnote when M = 0).
 
+## Step 0.6 — Resume (idempotent continue)
+
+### Trigger
+
+`--resume` is present in `$ARGUMENTS`, **or** (automatic) `course-index/coverage.md` exists and its `<!-- COVERAGE: files=A/N, partial=true … -->` comment carries `partial=true`.
+
+`--force` and `--resume` are mutually exclusive: `--force` discards all prior state and regenerates from scratch; `--resume` reads existing state and continues from where it left off. If both flags are provided, `--resume` takes precedence and `--force` is ignored. Output a one-line notice (both languages):
+
+- **en:** "Both `--force` and `--resume` specified; `--resume` takes precedence — continuing from partial index."
+- **ko:** "`--force`와 `--resume`이 함께 지정되었습니다. `--resume`이 우선 적용됩니다 — 부분 인덱스에서 재개합니다."
+
+### Already-complete guard (idempotent)
+
+If `course-index/coverage.md` exists and its COVERAGE comment shows `partial=false, files=N/N`, output a one-line message and exit without spawning any agents:
+
+- **en:** "course-index/ is already complete (`files=N/N, partial=false`). Nothing to do."
+- **ko:** "course-index/가 이미 완료 상태입니다 (`files=N/N, partial=false`). 재분석할 파일이 없습니다."
+
+### Reconstruct the processed set (no re-read of converted sources)
+
+Read the existing `course-index/summary.md`, `course-index/patterns.md`, and `course-index/coverage.md` to reconstruct the *processed set*:
+
+- From `coverage.md`: parse the `<!-- COVERAGE: files=A/N, … -->` comment to learn A (already processed) and N (total).
+- From `coverage.md` Forward map: collect every file path or problem ID that identifies a processed source file.
+- From `patterns.md`: collect existing `### Pk.` pattern card IDs (P1..Pk) and their `**Appears in.**` problem IDs to identify covered files.
+- From `summary.md`: collect existing `§` anchors to identify covered lecture files.
+
+Do NOT re-read any converted source file (`converted/**/*.md`) during this reconstruction — use only the existing `course-index/` index files. This is the same constraint as Steps 2 and 3 (prevents context explosion).
+
+### Fan-out only not-yet-processed files
+
+From the Step 0 discovery list (full `converted/` scan), subtract the processed set to produce the **not-yet-processed** file list. Apply the same batch rules as Step 0 (first-batch cap of 3–4 files for batch-1, then ceiling ~10 for subsequent batches).
+
+### Merge — do NOT overwrite
+
+After each batch of not-yet-processed files completes its Reduce, **merge** the new partial index into the existing `course-index/` files using the Step 0.5 merge rules (preserve entries outside the current set):
+
+- Existing `§` anchors, topic-tree entries, and scope paragraph in `summary.md` are preserved; new sections are appended.
+- Existing `### Pk.` pattern cards keep their current IDs (P1..Pk). New patterns are assigned the next available sequential IDs continuing from the highest existing Pk — do NOT renumber existing cards (downstream `hwmap`, `weakmap`, `quiz` regex anchor on the existing Pk numbers).
+- Existing coverage rows in `coverage.md` are preserved; new rows are added.
+- Use the same `.partial` → rename atomic write sequence as Step 0 batch-commit (all three files, deterministic rename order).
+
+### COVERAGE comment update
+
+On each batch-commit during resume, recalculate `files=A/N` (A = cumulative processed count across all prior runs + current resume batches). Set `partial=true` while A < N. On the final batch when A = N, set `partial=false`. The COVERAGE comment must be updated on every batch-commit so an interrupt during resume still leaves a valid, parseable partial state.
+
+### i18n
+
+All chat output in this step is gated on `$INTERFACE_LANG` (en · ko). Token identifiers (`course-index/`, `summary.md`, `patterns.md`, `coverage.md`, `--resume`, `--force`, `files=A/N`, `partial`, `P1..Pk`) stay verbatim in both languages.
+
 ## Step 0.75 — Partial-commit guarantee (loop contract anchor)
 
 The Reduce phase (Steps 1–3) must be entered even if not all fan-out agents have completed. The batch-commit mechanism defined in **Step 0** above is the enforcement point of this guarantee. As soon as each batch completes, the Reduce phase writes the accumulated index to disk (`.partial`→rename) **before** the next batch is spawned; the last committed batch therefore always survives an interrupt. Do not wait indefinitely for lagging agents — if a sub-agent does not return by the time its batch window closes, mark it FAILED and proceed to the batch-commit with whatever partial indexes were collected.
 
 The three output files must be in a parseable state conforming to their anchor contracts (§ headers, table headers, `### Pk.` pattern card format) whenever they exist on disk — a reader must never observe a torn or empty file. This holds for **every batch-commit**, not only the final one.
 
-**Atomic writes:** Write each of the three output files to a `.partial` scratch path first (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`), then rename to the final path (Step 0 batch-commit, step 2). Never write the final path directly — applies to every batch-commit, not only the final write. The convention is `.partial`→rename on all three files in each batch-commit cycle, exactly as specified in Step 0.
+**Atomic writes:** Write each of the three output files to a `.partial` scratch path first (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`), then rename to the final path (Step 0 batch-commit, step 2). Never write the final path directly — applies to every batch-commit, not only the final write. The convention is `.partial`→rename on all three files in each batch-commit cycle, exactly as specified in Step 0. All three `.partial` writes MUST complete, then all three renames MUST complete (in deterministic order: summary → patterns → coverage), **before** streaming the batch-commit progress line or spawning the next batch. A `.partial` that is written but not renamed is an **incomplete** batch-commit — on the next invocation (including `--resume`) it is treated as not-yet-committed. Never leave a `.partial` orphan on the final path side.
 
 **Partial-run metadata comment (mandatory on every batch-commit):** This is the same comment written by **Step 0** batch-commit, step 3 — it is written on **every** batch-commit (partial and final), not only on subset runs. Prepend the following HTML comment to `coverage.md` immediately before the `## Reverse map …` header:
 
@@ -277,4 +329,6 @@ Next steps:
 
 ## Idempotence
 
-If `course-index/*.md` already exists, warn (in $INTERFACE_LANG): "I'll overwrite the existing index. Back up any hand-edited content first." Wait for confirmation unless `--force` in arguments.
+If `course-index/*.md` already exists and `--resume` is active (or `partial=true` is detected), the resume path (Step 0.6) applies — the existing index is **merged/continued**, not overwritten. No confirmation prompt is shown in this path.
+
+If `course-index/*.md` already exists and neither `--resume` nor `partial=true` applies, warn (in $INTERFACE_LANG): "I'll overwrite the existing index. Back up any hand-edited content first." Wait for confirmation unless `--force` in arguments.
