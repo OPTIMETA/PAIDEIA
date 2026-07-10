@@ -200,7 +200,7 @@ The desktop app is the smoothest reading surface for Paideia — `summary.md`, `
    /plugin install paideia@paideia-marketplace
    ```
 
-3. The 16 `/paideia:` slash commands are now available in every conversation. Continue to **Per-course bootstrap** below.
+3. The 18 `/paideia:` slash commands are now available in every conversation. Continue to **Per-course bootstrap** below.
 
 ### Install via the Claude Code CLI
 
@@ -216,7 +216,7 @@ If you prefer the terminal, install [Claude Code](https://claude.ai/claude-code)
 
 > The full `https://...` URL is deliberate — the `owner/repo` shorthand makes the CLI try SSH first, which fails if you don't have a GitHub SSH key registered. HTTPS always works.
 
-After install, 16 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
+After install, 18 slash commands become available under the `/paideia:` namespace. CLI users should also set up [Obsidian as a reading companion](#a-reading-tip-use-obsidian) — the terminal can't render math.
 
 ### Per-course bootstrap
 
@@ -380,7 +380,7 @@ In Claude Code:
 
 ---
 
-## Commands (16 total)
+## Commands (18 total)
 
 | Command | Purpose |
 |---------|---------|
@@ -388,6 +388,8 @@ In Claude Code:
 | `/paideia:doctor [--fix]` | Diagnose the install + workspace (Python, poppler, tesseract, Ollama/Qwen3-VL, course folders, `.course-meta`, writable paths, statusline wiring); `--fix` repairs the permission-free issues |
 | `/paideia:ingest [--force]` | Every PDF in `materials/**` → markdown in `converted/**` via the vision pipeline (parallel agents, one per PDF, LaTeX-faithful). |
 | `/paideia:analyze [hints]` | Build `course-index/{summary,patterns,coverage}.md` |
+| `/paideia:reindex [--fix]` | Idempotent, analyze-free rewrite: retired coverage.md tier markers → canonical vocabulary; errors/log.md nature/phase facet materialization (header-data 1:1). Atomic, byte-preserving. |
+| `/paideia:graph [--rebuild]` | Generate `course-index/concept-graph.md` — mermaid concept graph with INTERFACE_LANG node labels, document-order C-IDs, and Obsidian wikilinks. Reads only the built index (no analyze fan-out). |
 | `/paideia:hwmap hot\|<§>` | Surface 🔥🔥 Exam-primary sections ranked by HW density |
 | `/paideia:pattern <§\|Pk\|keyword>` | Show pattern cards from course-index |
 | `/paideia:derive <target>` | Clean reference derivation to `derivations/<slug>.md` |
@@ -499,16 +501,18 @@ PAIDEIA/
     │   │   └── twin-recipe.md           # invariance rules for variant generation
     │   ├── answer-processing/SKILL.md   # strategy-grade hand-written OCR output
     │   └── alt-import/SKILL.md          # import an Exam Radar (Alt) export → radar.md + coverage lecture column
-    ├── commands/                        # 16 slash commands
+    ├── commands/                        # 18 slash commands
     │   ├── init-course.md  doctor.md    ingest.md    analyze.md
-    │   ├── hwmap.md        pattern.md   derive.md    quiz.md
-    │   ├── blind.md        twin.md      chain.md     mock.md
-    │   ├── grade.md        weakmap.md   cheatsheet.md
+    │   ├── reindex.md      graph.md     hwmap.md     pattern.md
+    │   ├── derive.md       quiz.md      blind.md     twin.md
+    │   ├── chain.md        mock.md      grade.md     weakmap.md
+    │   ├── cheatsheet.md
     │   └── alt.md
     └── scripts/
-        ├── paideia_lib.py               # shared core: .course-meta parsing, D-day math, the phase state machine
+        ├── paideia_lib.py               # shared core: .course-meta parsing, D-day math, the phase state machine, RETIRED_TO_CANONICAL
         ├── log_tool.py                  # deterministic errors/log.md writer — schema-validated, idempotent per source
         ├── doctor.py                    # /paideia:doctor: install + workspace diagnostic, permission-free --fix
+        ├── reindex.py                   # /paideia:reindex: atomic, analyze-free coverage.md marker rewrite + errors/log.md facet materialization
         ├── verify_tool.py               # /paideia:grade symbolic preflight: LaTeX/SymPy equivalence via math-verify, honest downgrade when absent
         ├── vision_ocr.py                # opt-in: ollama qwen3-vl driver + tesseract forcing, for --ocr=ollama|tesseract
         ├── statusline.py                # emits `paideia · <COURSE> · D-N · <phase> · P<k> ↑` for Claude Code's statusline slot

@@ -7,6 +7,8 @@ reintroduce the drift class fixed across v0.9.9–v0.9.21.
 """
 from __future__ import annotations
 
+import json
+import re
 import unittest
 
 from fixtures import COMMANDS, REPO, SCRIPTS, SKILLS
@@ -43,8 +45,8 @@ class TestRetiredTierVocabulary(unittest.TestCase):
 
 
 class TestCommandInventory(unittest.TestCase):
-    def test_sixteen_commands(self):
-        self.assertEqual(len(list(COMMANDS.glob("*.md"))), 16)
+    def test_eighteen_commands(self):
+        self.assertEqual(len(list(COMMANDS.glob("*.md"))), 18)
 
     def test_hwmap_blind_not_recommended_anywhere(self):
         """`/hwmap blind` is a legacy alias for HOT — recommending it as a
@@ -515,6 +517,163 @@ class TestInitCourseVerifyStep(unittest.TestCase):
                       "init-course.md must retain English opt-out prompt for TTY path")
         self.assertIn("기호(SymPy) 검산이 미설치입니다", self.ic,
                       "init-course.md must retain Korean opt-out prompt for TTY path")
+
+
+class TestGraphCommand(unittest.TestCase):
+    """Spec-lint: graph.md contract anchors (FND-023, FND-029)."""
+
+    def setUp(self):
+        self.graph = (COMMANDS / "graph.md").read_text(encoding="utf-8")
+
+    def test_graph_command_exists(self):
+        self.assertTrue((COMMANDS / "graph.md").exists(),
+                        "commands/graph.md must exist for /paideia:graph")
+
+    def test_graph_single_mermaid_fence_rule(self):
+        """FND-023 regression guard: spec must mandate exactly one closing fence."""
+        text = self.graph
+        # Must contain the single-fence rule or double-fence prohibition
+        has_single_rule = ("exactly one" in text and "fence" in text)
+        has_double_ban = ("double" in text.lower() and "fence" in text.lower())
+        self.assertTrue(has_single_rule or has_double_ban,
+                        "graph.md must mandate a single mermaid fence and/or ban double fences (FND-023)")
+
+    def test_graph_interface_lang_labels(self):
+        """Node labels must follow INTERFACE_LANG, not be hardcoded to English."""
+        self.assertIn("INTERFACE_LANG", self.graph,
+                      "graph.md must reference INTERFACE_LANG for node labels")
+        # Must be explicit that labels follow the course language
+        has_lang_label = ("node label" in self.graph.lower() or "labels" in self.graph.lower())
+        self.assertTrue(has_lang_label,
+                        "graph.md must mention that node labels follow INTERFACE_LANG")
+
+    def test_graph_wikilink_contract(self):
+        """Obsidian wikilink interoperability must be specified."""
+        self.assertIn("[[", self.graph,
+                      "graph.md must specify wikilink [[…]] node annotation (Obsidian interop)")
+
+    def test_graph_document_order_ids(self):
+        """C-IDs must be document-order deterministic."""
+        self.assertIn("document", self.graph.lower(),
+                      "graph.md must specify document-order ID assignment")
+        self.assertIn("C1", self.graph,
+                      "graph.md must reference the C1..Cn ID scheme")
+
+    def test_graph_no_fan_out_by_default(self):
+        """Default path must NOT fan out to converted/ — index-shortcut only."""
+        self.assertIn("index", self.graph.lower(),
+                      "graph.md must describe the index-shortcut default path")
+        self.assertIn("--rebuild", self.graph,
+                      "graph.md must gate converted/ fan-out behind --rebuild flag")
+
+
+class TestManifestConsistency(unittest.TestCase):
+    """Pin plugin.json / marketplace.json version + command-count so a feature
+    commit can't add a command without bumping the manifest (release contract).
+
+    Regression guard for defect-1: /reindex + /graph were added but the manifest
+    still advertised '16 slash commands' at rc.25 while the READMEs said 18.
+    """
+
+    PLUGIN_JSON = REPO / "plugins" / "paideia" / ".claude-plugin" / "plugin.json"
+    MARKETPLACE_JSON = REPO / ".claude-plugin" / "marketplace.json"
+    _SEMVER_RC_RX = re.compile(r"^1\.0\.0-rc\.\d+$")
+
+    def setUp(self):
+        self.plugin = json.loads(self.PLUGIN_JSON.read_text(encoding="utf-8"))
+        self.market = json.loads(self.MARKETPLACE_JSON.read_text(encoding="utf-8"))
+        self.market_entry = next(
+            p for p in self.market["plugins"] if p["name"] == "paideia"
+        )
+        self.n_commands = len(list(COMMANDS.glob("*.md")))
+
+    def test_plugin_version_is_wellformed_rc(self):
+        self.assertRegex(self.plugin["version"], self._SEMVER_RC_RX,
+                         "plugin.json version must be a 1.0.0-rc.N release string")
+
+    def test_marketplace_version_matches_plugin(self):
+        self.assertEqual(self.market_entry["version"], self.plugin["version"],
+                         "marketplace.json version must equal plugin.json version "
+                         "(the two manifests must be bumped together)")
+
+    def test_plugin_description_command_count_matches_disk(self):
+        """plugin.json description must advertise the true on-disk command count."""
+        desc = self.plugin["description"]
+        m = re.search(r"(\d+) slash commands", desc)
+        self.assertIsNotNone(m, "plugin.json description must state 'N slash commands'")
+        self.assertEqual(int(m.group(1)), self.n_commands,
+                         f"plugin.json says {m.group(1)} slash commands but "
+                         f"{self.n_commands} exist on disk")
+
+    def test_marketplace_description_command_count_matches_disk(self):
+        """marketplace.json description must advertise the true on-disk count."""
+        desc = self.market_entry["description"]
+        m = re.search(r"(\d+) commands", desc)
+        self.assertIsNotNone(m, "marketplace.json description must state 'N commands'")
+        self.assertEqual(int(m.group(1)), self.n_commands,
+                         f"marketplace.json says {m.group(1)} commands but "
+                         f"{self.n_commands} exist on disk")
+
+    def test_new_commands_advertised_in_plugin_description(self):
+        """A shipped command must be discoverable from the manifest changelog.
+        Guards the specific defect: /reindex and /graph were added silently."""
+        desc = self.plugin["description"]
+        for cmd in ("/paideia:reindex", "/paideia:graph"):
+            self.assertIn(cmd, desc,
+                          f"plugin.json description must mention {cmd} "
+                          "(new commands require a manifest changelog clause)")
+
+
+class TestReindexCommand(unittest.TestCase):
+    """Spec-lint: reindex.md contract anchors (defect-1 coverage)."""
+
+    def setUp(self):
+        self.reindex = (COMMANDS / "reindex.md").read_text(encoding="utf-8")
+
+    def test_reindex_command_exists(self):
+        self.assertTrue((COMMANDS / "reindex.md").exists(),
+                        "commands/reindex.md must exist for /paideia:reindex")
+
+    def test_reindex_no_analyze(self):
+        """Reindex must explicitly state it does NOT run analyze."""
+        text = self.reindex.lower()
+        self.assertIn("analyze", text,
+                      "reindex.md must mention analyze (to ban it)")
+        # Must contain a negation of analyze invocation
+        has_no_analyze = (
+            "does not run" in text or
+            "not run" in text or
+            "without running" in text or
+            "no sub-agent" in text or
+            "no fan-out" in text
+        )
+        self.assertTrue(has_no_analyze,
+                        "reindex.md must explicitly state it does not invoke analyze/sub-agents")
+
+    def test_reindex_atomic_write(self):
+        """Atomic write contract must be stated."""
+        self.assertIn("atomic", self.reindex.lower(),
+                      "reindex.md must specify atomic write (tmp + os.replace pattern)")
+
+    def test_reindex_byte_preserving(self):
+        """Data byte-preservation contract must be stated."""
+        self.assertIn("byte", self.reindex.lower(),
+                      "reindex.md must state data entries are byte-preserved")
+
+    def test_reindex_idempotent(self):
+        """Idempotence must be stated."""
+        self.assertIn("idempotent", self.reindex.lower(),
+                      "reindex.md must state idempotence guarantee")
+
+    def test_reindex_course_mode_gate(self):
+        """course-meta gate must be documented."""
+        self.assertIn(".course-meta", self.reindex,
+                      "reindex.md must document the .course-meta course-mode gate")
+
+    def test_reindex_interface_lang(self):
+        """INTERFACE_LANG must be referenced."""
+        self.assertIn("INTERFACE_LANG", self.reindex,
+                      "reindex.md must reference INTERFACE_LANG for output language")
 
 
 if __name__ == "__main__":

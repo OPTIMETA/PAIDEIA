@@ -112,6 +112,19 @@ _META_RX = re.compile(r"^\s*([A-Z_][A-Z0-9_]*)\s*:\s*(.+?)\s*$")
 # /blind entries may have used `pattern_missed_initial:`. Accept both.
 PATTERN_RX = re.compile(r"\b(?:pattern|pattern_missed_initial)\s*:\s*(P\d+)")
 
+# ---------------------------------------------------------------------------
+# Tier-marker migration vocabulary — single source of truth (FND-008)
+# Longest keys first: substitute ✅✅ before ✅, 🔴🔴 before 🔴 to prevent
+# double-substitution (e.g. ✅✅ → 🔥🔥🔥 if ✅ is processed first).
+# Used by reindex.py; also re-confirmed in analyze.md:301 / course-builder/SKILL.md:154.
+# ---------------------------------------------------------------------------
+RETIRED_TO_CANONICAL: dict[str, str] = {
+    "✅✅": "🔥🔥",
+    "✅":   "🔥",
+    "🔴🔴": "⚪",
+    "🔴":   "🟡",
+}
+
 
 def parse_meta(cwd: Path) -> dict[str, str]:
     """Parse `.course-meta` into a dict. Empty dict when absent/unreadable.
