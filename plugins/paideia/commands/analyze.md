@@ -33,13 +33,22 @@ Spawn one `general-purpose` Task sub-agent **per file**, in parallel, up to the 
 
 **First-batch cap (mandatory — batch-1 must provably commit inside the standard window):** The first batch is intentionally smaller than the full ceiling. Set batch-1 size = min(FIRST_BATCH_CAP, N), where FIRST_BATCH_CAP is 3–4 files. This ensures that fan-out + Reduce + all three `.partial` writes + all three renames provably complete and commit a valid course-index inside the standard window — batch-1 must provably commit a valid course-index inside the standard window; subsequent batches widen to the ceiling (~10). Choosing a ceiling-sized first batch risks a SIGTERM (exit 143) with zero committed files if the Reduce + write phase is reached near the window boundary (as observed in FND-002: "assembling section headers" → SIGTERM, 0 files committed). The small first batch eliminates this risk while the subsequent batches widen to recover throughput.
 
+**Batch-1 emit-time self-check (mandatory):** Before streaming the batch-1 header, compute `b = min(4, N)` (FIRST_BATCH_CAP upper bound is 4). Verify that the actual file count you are about to spawn is ≤ b. If the computed file list length exceeds b, truncate it to the first b files (applying selection priority below) and carry the remainder into batch-2. Emitting a batch-1 header with a file range `1..b` where b > min(4, N) is a **contract violation** — it indicates the self-check was bypassed.
+
+- **en:** Batch-1 must contain ≤ min(4, N) files. Streaming a batch-1 header with more than 4 files (when N ≥ 4) is a contract violation.
+- **ko:** 배치-1은 반드시 min(4, N)개 이하 파일이어야 합니다. N ≥ 4일 때 4개 초과 배치-1 헤더 방출은 계약 위반입니다.
+
+**Standard vs golden window note:** The standard deployment window (approximately 290 s) is narrower than the e2e-golden window (approximately 560–600 s). Keeping batch-1 small (≤ 4 files) ensures at least one committed course-index survives in the narrower window. Full-course completion (all N files, `partial=false`) requires either `--resume` repetition or the wider golden window; this is a measurement-condition constraint, not a code defect.
+
+**First-batch file selection priority (recommended — rich first-batch patterns):** When selecting the min(FIRST_BATCH_CAP, N) files for batch-1, prefer `converted/solutions/*.md` and `converted/homework/*.md` files over `converted/lectures/*.md` files. Solutions and homework files contain problem IDs and recurring technique instances; including at least one solutions/homework file in batch-1 increases the probability that `patterns.md` accumulates ≥1 recurring pattern card (≥2 distinct `problem_id` occurrences) after batch-1's Reduce. A batch-1 consisting entirely of lecture-only files risks producing a `patterns.md` with 0 pattern cards (lecture notes rarely contain ≥2 problem IDs), making the committed course-index not rich. This is a **recommended ordering**, not a hard constraint — if the course contains only lectures (e.g. `--lectures-only` flag), proceed with lecture files in document order.
+
 Before spawning the first batch, output a batch-progress header:
 
 ```
-Batch 1/K (files 1..min(FIRST_BATCH_CAP, N))
+Batch 1/K (files 1..b)
 ```
 
-where K = ceil((N − min(FIRST_BATCH_CAP, N)) / ceiling) + 1. At the start of each subsequent batch M output:
+where b = min(4, N) (verified by the emit-time self-check above) and K = ceil((N − b) / ceiling) + 1. At the start of each subsequent batch M output:
 
 ```
 Batch M/K (files a..b)
@@ -51,9 +60,11 @@ Stream this header immediately before spawning each batch's agents.
 
 After all agents in batch M return (succeeded or marked FAILED), and before spawning batch M+1, execute the Reduce phase (Steps 1–3) on the **cumulative** partial indexes from batches 1..M and write the three output files atomically:
 
-1. Write `course-index/summary.md.partial`, `course-index/patterns.md.partial`, `course-index/coverage.md.partial` — fully formed files conforming to all anchor contracts.
-2. Rename each `.partial` to its final path — all three `.partial` writes MUST complete, then all three renames MUST complete, **before** streaming the batch-commit progress line or spawning the next batch. Rename in deterministic order: `summary.md.partial` → `summary.md`, then `patterns.md.partial` → `patterns.md`, then `coverage.md.partial` → `coverage.md`. Never write the final path directly — a reader must never observe a torn or empty file. Never leave a `.partial` orphan on the final path side: a batch-commit that has written a `.partial` but not renamed is **incomplete** — on the next invocation it is treated as not-yet-committed (see Resume, Step 0.6).
-3. In `coverage.md` (the `.partial` before rename), prepend the metadata comment immediately before `## Reverse map …`:
+1. **Pre-write orphan cleanup.** Before writing any scratch file, delete any orphan `.partial` scratch files (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`) left next to the final paths by a prior interrupted run. Orphan scratchfiles are created when a prior invocation wrote the `.partial` but was interrupted before rename; deleting them before writing new scratchfiles prevents stale data confusion and eliminates GUI file-tree clutter (FND-002/010).
+2. **Write the three `.partial` scratch files.** Write `course-index/summary.md.partial`, `course-index/patterns.md.partial`, `course-index/coverage.md.partial` — fully formed files conforming to all anchor contracts.
+3. **Rename in deterministic order.** Rename each `.partial` to its final path — all three `.partial` writes MUST complete, then all three renames MUST complete, **before** streaming the batch-commit progress line or spawning the next batch. Rename in deterministic order: `summary.md.partial` → `summary.md`, then `patterns.md.partial` → `patterns.md`, then `coverage.md.partial` → `coverage.md`. Never write the final path directly — a reader must never observe a torn or empty file. Never leave a `.partial` orphan on the final path side: a batch-commit that has written a `.partial` but not renamed is **incomplete** — on the next invocation it is treated as not-yet-committed (see Resume, Step 0.6).
+4. **Post-rename orphan confirmation.** After all three renames complete, confirm that no orphan `.partial` scratch files remain in `course-index/`. If any remain (e.g. from a partial-failure or duplicate write), delete them before streaming the batch-commit progress line. Rename consumes the scratch source, but defensive cleanup handles edge cases (partial failure, duplicate writes).
+5. In `coverage.md` (the `.partial` before rename), prepend the metadata comment immediately before `## Reverse map …`:
 
    ```
    <!-- COVERAGE: files=<A>/<N>, partial=<true|false>, since=<date|->, subset=<glob|-> -->
@@ -61,7 +72,7 @@ After all agents in batch M return (succeeded or marked FAILED), and before spaw
 
    where A = count of files successfully processed so far across batches 1..M (the same "already-processed count" slot referred to as A in Step 0.6 Resume and Step 0.75). If A < N set `partial=true`; on the last batch when A = N set `partial=false`.
 
-4. After completing all three renames, stream one progress line to chat (in `$INTERFACE_LANG`, keeping token identifiers verbatim):
+6. After completing all three renames, stream one progress line to chat (in `$INTERFACE_LANG`, keeping token identifiers verbatim):
 
    - **en:** `Batch M/K committed (A files/N on disk)`
    - **ko:** `배치 M/K 커밋 완료 (A/N 파일 디스크 저장됨)`
@@ -199,9 +210,39 @@ After each batch of not-yet-processed files completes its Reduce, **merge** the 
 
 On each batch-commit during resume, recalculate `files=A/N` (A = cumulative processed count across all prior runs + current resume batches). Set `partial=true` while A < N. On the final batch when A = N, set `partial=false`. The COVERAGE comment must be updated on every batch-commit so an interrupt during resume still leaves a valid, parseable partial state.
 
+### Orphan cleanup on resume entry
+
+On resume entry (before spawning any not-yet-processed fan-out agents), scan `course-index/` for orphan `.partial` scratch files (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`). These indicate a prior invocation wrote a scratch but was interrupted before the rename. Delete any found orphans before proceeding with the resume fan-out. Output one progress line (in `$INTERFACE_LANG`):
+
+- **en:** `Cleaned N orphan .partial scratch file(s) from a prior interrupted run; resuming.`
+- **ko:** `직전 중단 실행의 orphan .partial 스크래치 N개를 정리하고 재개합니다.`
+
+(where N = count of deleted orphans; omit this line entirely if N = 0.)
+
+Orphan scratchfiles are **not reused** — they may represent incomplete or torn partial indexes. Deleting them is always safe because the final path state (or absence thereof) is the sole source of truth for resume progress.
+
 ### i18n
 
 All chat output in this step is gated on `$INTERFACE_LANG` (en · ko). Token identifiers (`course-index/`, `summary.md`, `patterns.md`, `coverage.md`, `--resume`, `--force`, `files=A/N`, `partial`, `P1..Pk`) stay verbatim in both languages.
+
+## Step 0.85 — Orphan scratch cleanup on interrupt/resume
+
+This step documents the **active cleanup** obligation that prevents orphan `.partial` scratch files from accumulating across interrupted runs.
+
+**On every batch-commit (mandatory):**
+1. Before writing new `.partial` scratch files for the current batch, delete any pre-existing orphan `.partial` files in `course-index/` (from prior interrupted runs or duplicate writes).
+2. After all three renames complete for the current batch, confirm no `.partial` files remain in `course-index/`. If any are found, delete them.
+
+**On resume entry (before first batch fan-out):**
+- Scan `course-index/` for orphan `.partial` scratch files. Delete any found and emit the i18n progress line (see Step 0.6 Orphan cleanup on resume entry above).
+
+**Committed state invariant:** After any batch-commit completes, `course-index/` MUST contain:
+- The three final files (`summary.md`, `patterns.md`, `coverage.md`) — all renamed from their `.partial` scratch, fully parseable.
+- Zero `.partial` files — all scratch files deleted or renamed.
+
+A batch-commit that leaves **only** `.partial` files (with no final counterparts) is an **incomplete** batch-commit. A batch-commit that leaves `.partial` files alongside final files is an **incomplete cleanup** — the `.partial` files must be removed.
+
+This invariant is the acceptance gate that `run-loop3-analyze.mjs` checks post-commit: `ls course-index/*.partial` must return empty. It is also the invariant that eliminates GUI file-tree clutter (FND-002/010 related: `.partial` files were visible as inert grey items in the shell file tree because the view filter did not exclude them by extension).
 
 ## Step 0.75 — Partial-commit guarantee (loop contract anchor)
 
@@ -210,6 +251,17 @@ The Reduce phase (Steps 1–3) must be entered even if not all fan-out agents ha
 The three output files must be in a parseable state conforming to their anchor contracts (§ headers, table headers, `### Pk.` pattern card format) whenever they exist on disk — a reader must never observe a torn or empty file. This holds for **every batch-commit**, not only the final one.
 
 **Atomic writes:** Write each of the three output files to a `.partial` scratch path first (`summary.md.partial`, `patterns.md.partial`, `coverage.md.partial`), then rename to the final path (Step 0 batch-commit, step 2). Never write the final path directly — applies to every batch-commit, not only the final write. The convention is `.partial`→rename on all three files in each batch-commit cycle, exactly as specified in Step 0. All three `.partial` writes MUST complete, then all three renames MUST complete (in deterministic order: summary → patterns → coverage), **before** streaming the batch-commit progress line or spawning the next batch. A `.partial` that is written but not renamed is an **incomplete** batch-commit — on the next invocation (including `--resume`) it is treated as not-yet-committed. Never leave a `.partial` orphan on the final path side.
+
+**Committed-state gate (after every batch-commit, mandatory):** After completing all three renames, verify that:
+1. The three final paths (`summary.md`, `patterns.md`, `coverage.md`) **all exist** in `course-index/`.
+2. Zero `.partial` files remain in `course-index/` — delete any remaining orphan scratch files.
+
+If final files exist but orphan `.partial` files are also present, delete the `.partial` files and proceed. A batch-commit where `.partial` files exist alongside final files is a partial-failure cleanup state; removing the `.partial` files restores the committed invariant. Emit an orphan-cleanup line (in `$INTERFACE_LANG`):
+
+- **en:** `Cleaned N orphan .partial scratch file(s) from a prior interrupted run; resuming.`
+- **ko:** `직전 중단 실행의 orphan .partial 스크래치 N개를 정리하고 재개합니다.`
+
+(where N = count of deleted orphans; omit this line when N = 0).
 
 **Partial-run metadata comment (mandatory on every batch-commit):** This is the same comment written by **Step 0** batch-commit, step 3 — it is written on **every** batch-commit (partial and final), not only on subset runs. Prepend the following HTML comment to `coverage.md` immediately before the `## Reverse map …` header:
 

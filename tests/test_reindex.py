@@ -305,11 +305,12 @@ class TestCoverageTierNotLastColumn(unittest.TestCase):
         """Direct guard for `_rewrite_coverage_line('| §1.6 | Title | ✅ | L2 |\\n')`.
         Old code: returned input UNCHANGED. Must now return ✅→🔥 with L2 preserved."""
         from reindex import _rewrite_coverage_line, _find_tier_col_idx
-        lines_with_header = [
-            "| § | Title | Exam tier | Notes |\n",
-            "|---|---|---|---|\n",
-        ]
-        tier_col_idx = _find_tier_col_idx(lines_with_header)
+        # _find_tier_col_idx takes str (text), not list — pass joined text.
+        text_with_header = (
+            "| § | Title | Exam tier | Notes |\n"
+            "|---|---|---|---|\n"
+        )
+        tier_col_idx = _find_tier_col_idx(text_with_header)
         line = "| §1.6 | Title | ✅ | L2 |\n"
         out = _rewrite_coverage_line(line, tier_col_idx)
         self.assertNotEqual(out, line,
@@ -999,6 +1000,280 @@ class TestOverriddenByPreserved(unittest.TestCase):
             result = p.read_text(encoding="utf-8")
             self.assertIn("overridden_by: grade/2026-06-01", result,
                           "overridden_by must be byte-preserved after facet materialization")
+
+
+# ---------------------------------------------------------------------------
+# Test 12 — alias header recognition (T-REINDEX-TIER-HEADER defect regression)
+# ---------------------------------------------------------------------------
+
+class TestAliasHeaderRecognition(unittest.TestCase):
+    """Regression guard for the alias-blindness defect: when coverage.md uses a
+    non-canonical tier header (e.g. 'Strength') instead of 'Exam tier', the old
+    `_find_tier_col_idx` returned None (literal regex only matched 'exam tier').
+    This caused _process_coverage to fall back to the rightmost-populated-cell
+    heuristic which, for tier-not-last layouts (trailing 'Notes'/'L2' column),
+    grabbed the wrong column → dry-run EXIT 0 ("already canonical") with retired
+    glyphs still present (false negative). Defect was live-reproduced against the
+    v1.0.0-rc.28 source.
+
+    Case A: alias header + tier IS rightmost column (simpler layout).
+    Case B: alias header + tier NOT rightmost (the exact defect reproduction).
+    Case C: alias header + tier cell + right-side data cell with a glyph (contamination guard).
+    Case D: canonical 'Exam tier' wins over alias when both are in the same table.
+    Case E: idempotence — fix twice → 2nd pass is a no-op.
+    """
+
+    # ── Case A: 'Strength' alias + tier rightmost ────────────────────────────
+
+    def test_alias_tier_rightmost_fix(self):
+        """'Strength' alias header + tier rightmost: --fix converts retired markers."""
+        coverage = (
+            "| § | Title | Strength |\n"
+            "|---|---|---|\n"
+            "| §1 | Reverse map A | ✅✅ |\n"
+            "| §2 | Reverse map B | 🔴 |\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            tmp = _make_course(Path(td))
+            p = _write_coverage(tmp, coverage)
+            old_cwd = Path.cwd()
+            os.chdir(tmp)
+            try:
+                count, err = reindex._process_coverage(p, fix=True)
+            finally:
+                os.chdir(old_cwd)
+            self.assertFalse(err)
+            self.assertEqual(count, 2, "two rows carry retired markers — both must be counted")
+            result = p.read_text(encoding="utf-8")
+            self.assertIn("🔥🔥", result, "✅✅ must become 🔥🔥")
+            self.assertIn("🟡", result, "🔴 must become 🟡")
+            self.assertNotIn("✅✅", result)
+            self.assertNotIn("🔴", result)
+
+    def test_alias_tier_rightmost_dryrun(self):
+        """Dry-run on 'Strength' alias header must return count>0 (exit 1)."""
+        coverage = (
+            "| § | Title | Strength |\n"
+            "|---|---|---|\n"
+            "| §1 | Reverse map A | ✅✅ |\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            tmp = _make_course(Path(td))
+            p = _write_coverage(tmp, coverage)
+            before = p.read_text(encoding="utf-8")
+            old_cwd = Path.cwd()
+            os.chdir(tmp)
+            try:
+                count, err = reindex._process_coverage(p, fix=False)
+            finally:
+                os.chdir(old_cwd)
+            self.assertFalse(err)
+            self.assertGreater(count, 0,
+                               "alias header + retired marker: dry-run must report count>0 (exit 1 path)")
+            # File untouched in dry-run
+            self.assertEqual(p.read_text(encoding="utf-8"), before)
+
+    # ── Case B: 'Strength' alias + tier NOT rightmost (exact defect reproduction) ──
+
+    def test_alias_tier_not_last_dryrun_exits_needs_fix(self):
+        """CORE REGRESSION: alias header + tier non-rightmost + trailing Notes column.
+
+        Old code: _find_tier_col_idx returned None (literal 'exam tier' only) →
+        rightmost-populated-cell fallback grabbed 'L2'/'L1' (not tier) →
+        _sub_retired found no retired marker in 'L2' → count=0 → false EXIT 0
+        "already canonical" while ✅✅ and 🔴 survived.
+
+        Must now: count>0 (EXIT 1 needs-fix).
+        """
+        coverage = (
+            "| § | Title | Strength | Notes |\n"
+            "|---|---|---|---|\n"
+            "| §1 | Reverse map A | ✅✅ | L2 |\n"
+            "| §2 | Reverse map B | 🔴 | L1 |\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            tmp = _make_course(Path(td))
+            p = _write_coverage(tmp, coverage)
+            before = p.read_text(encoding="utf-8")
+            old_cwd = Path.cwd()
+            os.chdir(tmp)
+            try:
+                count, err = reindex._process_coverage(p, fix=False)
+            finally:
+                os.chdir(old_cwd)
+            self.assertFalse(err)
+            self.assertGreater(
+                count, 0,
+                "DEFECT REGRESSION: dry-run must return count>0 (exit 1) for alias header + "
+                "tier-not-last + retired glyphs — old code returned 0 (false 'already canonical')"
+            )
+            # File untouched in dry-run
+            self.assertEqual(p.read_text(encoding="utf-8"), before,
+                             "dry-run must not modify the file")
+
+    def test_alias_tier_not_last_fix_rewrites_tier_preserves_notes(self):
+        """--fix on alias-header + tier-not-last must rewrite ONLY tier cell; Notes/L2 preserved."""
+        coverage = (
+            "| § | Title | Strength | Notes |\n"
+            "|---|---|---|---|\n"
+            "| §1 | Reverse map A | ✅✅ | L2 |\n"
+            "| §2 | Reverse map B | 🔴 | L1 |\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            tmp = _make_course(Path(td))
+            p = _write_coverage(tmp, coverage)
+            old_cwd = Path.cwd()
+            os.chdir(tmp)
+            try:
+                count, err = reindex._process_coverage(p, fix=True)
+            finally:
+                os.chdir(old_cwd)
+            self.assertFalse(err)
+            self.assertGreater(count, 0)
+            result = p.read_text(encoding="utf-8")
+            # Tier cells rewritten
+            self.assertIn("🔥🔥", result, "✅✅ must become 🔥🔥")
+            self.assertIn("🟡", result, "🔴 must become 🟡")
+            # Retired glyphs gone from tier column
+            self.assertNotIn("✅✅", result)
+            self.assertNotIn(" 🔴 ", result)
+            # Notes column byte-preserved
+            self.assertIn("L2", result, "Notes cell 'L2' must be byte-preserved")
+            self.assertIn("L1", result, "Notes cell 'L1' must be byte-preserved")
+            self.assertIn("Notes", result, "Notes header must be byte-preserved")
+
+    # ── Case C: alias + tier cell retired + right-side data cell has a glyph ──
+
+    def test_alias_header_data_cell_glyph_not_contaminated(self):
+        """Alias header: tier cell rewritten, data cell with 'done ✅' byte-preserved.
+
+        With old rightmost-populated-cell fallback: the rightmost non-empty cell
+        was 'done ✅' (glyph-bearing data cell), so it would be rewritten to
+        'done 🔥' (data contamination) while the real tier 🔴 was left behind.
+        Alias recognition pins the tier column by header → only tier cell rewrites.
+        """
+        coverage = (
+            "| § | Strength | Checklist |\n"
+            "|---|---|---|\n"
+            "| §1 | 🔴 | done ✅ |\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            tmp = _make_course(Path(td))
+            p = _write_coverage(tmp, coverage)
+            old_cwd = Path.cwd()
+            os.chdir(tmp)
+            try:
+                count, err = reindex._process_coverage(p, fix=True)
+            finally:
+                os.chdir(old_cwd)
+            self.assertFalse(err)
+            self.assertGreater(count, 0, "tier 🔴 must be counted as needing rewrite")
+            result = p.read_text(encoding="utf-8")
+            # Tier cell must be rewritten
+            self.assertIn("🟡", result, "tier 🔴 must become 🟡")
+            # Data cell must be byte-preserved (NOT 'done 🔥')
+            self.assertIn("done ✅", result,
+                          "data cell 'done ✅' must be byte-preserved — alias recognition "
+                          "prevents rightmost-glyph-fallback from contaminating it")
+            self.assertNotIn("done 🔥", result,
+                             "data cell 'done ✅' must NOT be rewritten to 'done 🔥' "
+                             "(data contamination by old rightmost-cell fallback)")
+
+    # ── Case D: canonical 'Exam tier' wins when alias also present ───────────
+
+    def test_canonical_wins_over_alias(self):
+        """When both 'Exam tier' and 'Strength' headers exist, 'Exam tier' column wins."""
+        # Two separate tables in the same file; first has 'Exam tier' (canonical),
+        # second has 'Strength' (alias). We verify via _find_tier_col_idx that the
+        # canonical is picked when it appears, and use _process_coverage end-to-end.
+        from reindex import _find_tier_col_idx
+
+        # Single table with both 'Exam tier' at index 2 and 'Strength' at index 3.
+        text = (
+            "| § | Title | Exam tier | Strength |\n"
+            "|---|---|---|---|\n"
+            "| §1 | A | ✅✅ | 🔴 |\n"
+        )
+        idx = _find_tier_col_idx(text)
+        # pipe-split: ['', ' § ', ' Title ', ' Exam tier ', ' Strength ', '']
+        # index 3 = 'Exam tier', index 4 = 'Strength'
+        # Verify we got the canonical (Exam tier) column, not the alias (Strength)
+        # We check by what _rewrite_coverage_line does: only Exam tier cell is rewritten.
+        with tempfile.TemporaryDirectory() as td:
+            tmp = _make_course(Path(td))
+            p = _write_coverage(tmp, text)
+            old_cwd = Path.cwd()
+            os.chdir(tmp)
+            try:
+                count, err = reindex._process_coverage(p, fix=True)
+            finally:
+                os.chdir(old_cwd)
+            self.assertFalse(err)
+            result = p.read_text(encoding="utf-8")
+            # 'Exam tier' column (✅✅) must be rewritten to 🔥🔥
+            self.assertIn("🔥🔥", result, "'Exam tier' column ✅✅ must be rewritten")
+            # 'Strength' column (🔴) must be byte-preserved (it's a data column here)
+            self.assertIn("🔴", result,
+                          "'Strength' column 🔴 must be preserved — canonical 'Exam tier' wins")
+            # 🔴 must NOT have been converted to 🟡 (that would mean alias was used)
+            self.assertNotIn("🟡", result,
+                             "'Strength' column 🔴 must not be rewritten — canonical wins")
+
+    # ── Case E: idempotence ───────────────────────────────────────────────────
+
+    def test_alias_fix_is_idempotent(self):
+        """Running --fix twice on alias-header file: 2nd pass count=0, byte-identical."""
+        coverage = (
+            "| § | Title | Strength | Notes |\n"
+            "|---|---|---|---|\n"
+            "| §1 | Reverse map A | ✅✅ | L2 |\n"
+            "| §2 | Reverse map B | 🔴 | L1 |\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            tmp = _make_course(Path(td))
+            p = _write_coverage(tmp, coverage)
+            old_cwd = Path.cwd()
+            os.chdir(tmp)
+            try:
+                reindex._process_coverage(p, fix=True)
+                after1 = p.read_text(encoding="utf-8")
+                count2, err2 = reindex._process_coverage(p, fix=True)
+                after2 = p.read_text(encoding="utf-8")
+            finally:
+                os.chdir(old_cwd)
+            self.assertFalse(err2)
+            self.assertEqual(count2, 0, "second pass must find nothing to rewrite")
+            self.assertEqual(after1, after2, "alias-header fix is idempotent")
+
+    # ── Direct unit test of _find_tier_col_idx with alias ────────────────────
+
+    def test_find_tier_col_idx_recognizes_aliases(self):
+        """_find_tier_col_idx must return a non-None index for each known alias."""
+        from reindex import _find_tier_col_idx, _TIER_HEADER_ALIASES
+        for alias in _TIER_HEADER_ALIASES:
+            # Build a minimal table with this alias as header
+            text = f"| § | Title | {alias.title()} | Notes |\n|---|---|---|---|\n| §1 | A | ✅ | L2 |\n"
+            idx = _find_tier_col_idx(text)
+            self.assertIsNotNone(idx,
+                                 f"_find_tier_col_idx must recognize alias '{alias}' (returned None)")
+
+    def test_find_tier_col_idx_canonical_beats_alias_in_text(self):
+        """Canonical 'Exam tier' wins over alias when both appear in the file text."""
+        from reindex import _find_tier_col_idx
+        text = (
+            "| § | Strength | Exam tier |\n"
+            "|---|---|---|\n"
+            "| §1 | 🔴 | ✅✅ |\n"
+        )
+        idx = _find_tier_col_idx(text)
+        # cells = ['', ' § ', ' Strength ', ' Exam tier ', '']
+        # Strength is at index 2, Exam tier at index 3
+        self.assertIsNotNone(idx)
+        # The returned index must correspond to 'Exam tier', not 'Strength'.
+        # We verify by checking the cell at that index in the header row.
+        header_cells = "| § | Strength | Exam tier |".split("|")
+        self.assertEqual(header_cells[idx].strip().lower(), "exam tier",
+                         f"index {idx} points to '{header_cells[idx].strip()}', not 'Exam tier'")
 
 
 if __name__ == "__main__":

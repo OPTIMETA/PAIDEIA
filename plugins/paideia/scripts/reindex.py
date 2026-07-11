@@ -6,7 +6,18 @@ Two jobs:
   (A) coverage.md: rewrite retired tier markers to canonical vocabulary.
       Mapping (longest-key-first to prevent double-substitution):
         ✅✅ → 🔥🔥   ✅ → 🔥   🔴🔴 → ⚪   🔴 → 🟡
-      Data cells (§, Title, HW coverage, ⚠weak) are preserved byte-for-byte.
+      Scope is header-driven, not positional:
+        - Table rows: the Exam-tier column is located first by the canonical
+          `Exam tier` header, then by non-canonical alias headers (e.g. `Strength`,
+          `Emphasis`, `Priority`, `Weight`, `Tier`), and finally — when no
+          recognised header exists (headless fragment) — by the rightmost cell
+          that actually carries a tier glyph (retired or canonical).  Only that
+          one cell is rewritten; §, Title, HW coverage and ⚠weak cells are
+          preserved byte-for-byte even if a data cell holds a retired glyph.
+        - Non-pipe lines (legend keys, aggregation / "Recommended drill priority"
+          prose that names tier glyphs outside a table) are rewritten whole-line.
+      Every rewritten glyph is counted, so a dry-run exits 1 while ANY retired
+      glyph survives anywhere in the file and 0 only after real convergence.
       Write is atomic (tmp + os.replace).
 
   (B) errors/log.md: materialize phase/nature facets into on-disk data blocks.
@@ -43,6 +54,33 @@ RETIRED_TO_CANONICAL = plib.RETIRED_TO_CANONICAL  # re-export for test_reindex.p
 # Substitution order: always longest key first to prevent double-substitution.
 # (✅✅ before ✅, 🔴🔴 before 🔴)
 _ORDERED_RETIRED = sorted(RETIRED_TO_CANONICAL.keys(), key=len, reverse=True)
+
+# Atomic tier glyphs — every single codepoint that names a tier, retired OR
+# canonical, derived from the map so it stays single-source (FND-008). Used only
+# to *locate* the tier cell in a headerless/ragged fallback (never to rewrite):
+# a cell that carries any of these is a tier cell, so we prefer it over a merely
+# non-empty trailing cell (e.g. a bare `L2`/`Notes` column) that has no glyph.
+_TIER_GLYPHS = frozenset(
+    ch
+    for tok in (*RETIRED_TO_CANONICAL.keys(), *RETIRED_TO_CANONICAL.values())
+    for ch in tok
+)
+
+# Canonical header label for the Exam-tier column (analyze.md:288 / course-builder/SKILL.md).
+# Matched case-insensitively. The canonical form always wins over aliases.
+_TIER_HEADER_CANONICAL = "exam tier"
+
+# Non-canonical alias header labels for the Exam-tier column. These are
+# recognized as a secondary match when the canonical `Exam tier` header is absent.
+# Matched case-insensitively against the stripped cell content.
+# Single source: if you add an alias here, that is the only place to change.
+_TIER_HEADER_ALIASES: frozenset[str] = frozenset({
+    "strength",
+    "emphasis",
+    "priority",
+    "weight",
+    "tier",
+})
 
 # Block-start sentinel — reuse paideia_lib's regex directly (single source of
 # truth, FND-008). It accepts any whitespace run after the dash (r"^-\s+problem_id"),
@@ -86,107 +124,153 @@ def _sub_retired(text: str) -> str:
     return text
 
 
-def _find_tier_col_idx(lines: list[str]) -> int | None:
-    """Scan a coverage.md line-list for the header row and return the cell index
-    of the 'Exam tier' column (pipe-split index, including the leading empty edge).
+def _split_cells(stripped: str) -> list[str] | None:
+    """Split a pipe-delimited table line into cells, or None if not a table row.
 
-    Returns None when no header row is found (headless fragment — callers fall back
-    to the legacy 'last populated cell' heuristic).
+    A genuine table row has a leading and a trailing pipe, so cells[0] and
+    cells[-1] are the empty edges and there are >= 3 cells overall.
     """
-    # Case-insensitive match; the canonical header token is 'Exam tier' (analyze.md:288).
-    header_rx = re.compile(r"exam\s+tier", re.IGNORECASE)
-    for line in lines:
-        stripped = line.rstrip("\n")
-        cells = stripped.split("|")
-        if len(cells) < 3:
+    if "|" not in stripped:
+        return None
+    cells = stripped.split("|")
+    if len(cells) < 3:
+        return None
+    return cells
+
+
+def _find_tier_col_idx(text: str) -> int | None:
+    """Locate the Exam-tier column index by scanning for the header row.
+
+    Priority:
+      1. Canonical `Exam tier` header (case-insensitive) — always wins.
+      2. Alias headers from `_TIER_HEADER_ALIASES` (e.g. `Strength`, `Emphasis`,
+         `Priority`, `Weight`, `Tier`) — recognized when the canonical header is
+         absent. This is the primary fix for the alias-blindness defect: a
+         Reverse-map table with header `Strength` + tier-column NOT rightmost
+         was previously undetected → false EXIT 0 with retired glyphs surviving.
+      3. None — no recognised header found; callers fall back to the rightmost
+         glyph-bearing cell heuristic (_rightmost_glyph_cell).
+
+    Takes the full file text as a string (splitlines internally). Returns the
+    cell index (into `line.split("|")`) of the located column.
+    """
+    canonical_idx: int | None = None
+    alias_idx: int | None = None
+
+    for line in text.splitlines():
+        cells = _split_cells(line.rstrip("\n"))
+        if cells is None:
             continue
-        # Skip separator rows (|---|---|)
-        if all(re.match(r"^[\s\-:]+$", c) or c == "" for c in cells):
+        # Skip table separator rows (|---|---|)
+        non_edge = cells[1:-1]
+        if all(re.match(r"^[\s\-:]+$", c) or c == "" for c in non_edge):
             continue
         for i, cell in enumerate(cells):
-            if header_rx.search(cell):
-                return i
+            label = cell.strip().lower()
+            if label == _TIER_HEADER_CANONICAL:
+                canonical_idx = i
+                break  # canonical found in this row — no need to check aliases
+            if alias_idx is None and label in _TIER_HEADER_ALIASES:
+                alias_idx = i
+
+    # Canonical always wins over alias.
+    return canonical_idx if canonical_idx is not None else alias_idx
+
+
+def _rightmost_glyph_cell(cells: list[str]) -> int | None:
+    """Index of the rightmost cell that carries a tier glyph, or None.
+
+    A tier glyph is any codepoint in `_TIER_GLYPHS` (retired OR canonical). This
+    is the fallback locator when no recognised header (canonical or alias) can pin
+    the column — a headerless reverse-map fragment, or a ragged row whose cell
+    count is short of the header-identified index. Preferring the rightmost
+    *glyph-bearing* cell over the rightmost merely-populated cell means a bare
+    `| §1.6 | Title | ✅ | L2 |` headless fragment normalizes the ✅ instead of
+    grabbing the trailing non-tier `L2` column and leaving the glyph behind.
+
+    NOTE: alias recognition (step 2 in _find_tier_col_idx) is the primary defence
+    against data-cell contamination when the tier column is non-rightmost. This
+    fallback handles only genuinely headerless fragments.
+    """
+    for i in range(len(cells) - 1, -1, -1):
+        if any(ch in _TIER_GLYPHS for ch in cells[i]):
+            return i
     return None
 
 
 def _rewrite_coverage_line(line: str, tier_col_idx: int | None) -> str:
-    """Rewrite retired tier markers in a coverage.md line.
+    """Rewrite retired tier markers on a single coverage.md line.
 
-    Table rows: substitution is scoped to the Exam-tier column identified by
-    `tier_col_idx` (the pipe-split cell index found from the header row).  When
-    `tier_col_idx` is None (headless fragment — no 'Exam tier' header found),
-    the function falls back to the legacy 'last populated cell' heuristic so
-    existing header-less fixtures are still handled.
+    Two disjoint code paths, both counted by _process_coverage:
 
-    Every other table cell — `§` numbers, section titles, HW coverage contents,
-    `⚠weak` flags — is preserved byte-for-byte even if it contains a retired
-    glyph (e.g. 'Checklist ✅ done'), satisfying reindex.md:26.
+      * Pipe-delimited table rows — substitution is scoped to the Exam-tier
+        column identified by `tier_col_idx` (the cell under the `Exam tier`
+        header or a recognized alias header), NOT the rightmost populated cell.
+        A retired glyph that legitimately appears in a data cell (a section title
+        `Checklist ✅ done`, or a `Notes`/`L2` column to the right of the tier
+        column) is preserved byte-for-byte (reindex.md). When the file carries no
+        recognised header at all (`tier_col_idx is None` — a bare headless
+        fragment), OR the header-identified index overruns a ragged row's cell
+        count, we fall back to the rightmost *glyph-bearing* cell so a tier glyph
+        at a lower index is still normalized instead of silently leaking. A bare
+        trailing `L2`/`Notes` column has no glyph, so it is skipped.
 
-    Non-pipe lines (legend / aggregate prose): retired tier markers anywhere in
-    the line are replaced by their canonical equivalents via `_sub_retired`, so
-    lines like 'Legend: ✅ = high exam priority' are normalized.
-
-    Table header/separator rows (pipe lines where every cell is whitespace or
-    `---`): returned unchanged, because tier vocabulary does not live there.
+      * Non-pipe lines (legend keys, aggregation / drill-priority prose that
+        names tier glyphs outside a table) — `_sub_retired` is applied to the
+        whole line, since there is no column structure to scope to.
     """
-    # Preserve any trailing newline, operate on the bare content.
+    # Preserve any trailing newline / whitespace, operate on the bare content.
     stripped = line.rstrip("\n")
     newline = line[len(stripped):]
 
-    # ── Non-pipe lines (prose / legend / aggregation text) ──────────────────
-    if "|" not in stripped:
+    cells = _split_cells(stripped)
+    if cells is None:
+        # Not a table row → legend / aggregation prose. Normalize the whole line.
         rewritten = _sub_retired(stripped)
         if rewritten == stripped:
-            return line  # no retired markers → byte-identical
+            return line
         return rewritten + newline
 
-    # ── Pipe-delimited table rows ────────────────────────────────────────────
-    cells = stripped.split("|")
-    if len(cells) < 3:
-        return line  # degenerate row, nothing to do
-
-    # Skip table separator rows (|---|---| etc.)
+    # Table row: skip separator rows (|---|---|)
     non_edge = cells[1:-1]
     if all(re.match(r"^[\s\-:]+$", c) for c in non_edge if c):
         return line
 
-    if tier_col_idx is not None:
-        # Header-based: only rewrite the identified Exam-tier column.
-        if tier_col_idx >= len(cells):
-            return line  # column out of range for this row
-        rewritten_cell = _sub_retired(cells[tier_col_idx])
-        if rewritten_cell == cells[tier_col_idx]:
-            return line  # tier cell had no retired marker → byte-identical
-        cells[tier_col_idx] = rewritten_cell
-        return "|".join(cells) + newline
-    else:
-        # Fallback (headless fragment): rewrite the last populated cell.
-        # NOTE: this path does not handle tier-not-last-column rows; it is kept
-        # only for backward-compatibility with header-less test fixtures.
-        tier_idx = None
-        for i in range(len(cells) - 1, -1, -1):
-            if cells[i].strip():
-                tier_idx = i
-                break
-        if tier_idx is None:
-            return line  # blank row, nothing to do
-        rewritten_cell = _sub_retired(cells[tier_idx])
-        if rewritten_cell == cells[tier_idx]:
-            return line
-        cells[tier_idx] = rewritten_cell
-        return "|".join(cells) + newline
+    # Pick the Exam-tier cell. The header (canonical or alias) wins whenever it
+    # addresses a cell in THIS row that actually holds a tier glyph — that is the
+    # normal well-formed case, and it keeps a retired glyph in a data cell (a
+    # title, or a `Notes`/`L2` column to the right) out of scope. A header cell
+    # WITHOUT a glyph means this row is headerless or ragged/misaligned.
+    idx = tier_col_idx
+    header_hits_glyph = (
+        idx is not None
+        and idx < len(cells)
+        and any(ch in _TIER_GLYPHS for ch in cells[idx])
+    )
+    if not header_hits_glyph:
+        # No recognised header (or header overruns this ragged row, or header lands
+        # on a non-glyph cell) → fall back to the rightmost glyph-bearing cell.
+        # If no cell carries a tier glyph, there is nothing to do.
+        idx = _rightmost_glyph_cell(cells)
+    if idx is None or idx >= len(cells):
+        return line  # blank row, or no tier cell locatable in this row
+    rewritten = _sub_retired(cells[idx])
+    if rewritten == cells[idx]:
+        return line  # tier cell had no retired marker → byte-identical
+    cells[idx] = rewritten
+    return "|".join(cells) + newline
 
 
 def _process_coverage(path: Path, fix: bool) -> tuple[int, bool]:
     """Return (retired_count, write_error).
 
-    retired_count: number of lines (tier-column table rows OR prose/legend lines)
-    that carry a retired marker and would be changed by the scoped rewrite.
-
-    Scope of 'scoped': retired glyphs in non-tier data cells (e.g. a section
-    title 'Checklist ✅ done') do NOT count — they are byte-preserved.  Only
-    the Exam-tier column (header-identified) and non-pipe prose lines count.
-
+    retired_count: number of LINES rewritten — table rows whose Exam-tier cell
+    (located by canonical header, alias header, or glyph-bearing-cell fallback)
+    carried a retired marker PLUS non-pipe legend/prose lines carrying one. A
+    dry-run (fix=False) returns this count unchanged so main() exits 1 while ANY
+    retired glyph survives anywhere in coverage.md and 0 only after convergence.
+    Retired glyphs living only in a preserved data cell (a title, or a Notes/L2
+    column) do NOT count — they are intentionally not rewritten.
     write_error: True if an atomic write failed.
     """
     try:
@@ -194,12 +278,9 @@ def _process_coverage(path: Path, fix: bool) -> tuple[int, bool]:
     except OSError:
         return 0, False
 
+    tier_col_idx = _find_tier_col_idx(text)
+
     lines = text.splitlines(keepends=True)
-
-    # Identify the Exam-tier column index from the header row (Option A).
-    # When no header is found, tier_col_idx is None → fallback heuristic.
-    tier_col_idx = _find_tier_col_idx(lines)
-
     retired_count = 0
     new_lines: list[str] = []
     changed = False

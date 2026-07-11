@@ -10,14 +10,17 @@ from __future__ import annotations
 import json
 import re
 import unittest
+from pathlib import Path
 
 from fixtures import COMMANDS, REPO, SCRIPTS, SKILLS
 
 import paideia_lib as plib
 
 # Lines that legitimately NAME the retired vocabulary (to ban it) are allowed;
-# anything else is a regression.
-_ALLOW_MARKERS = ("retired", "do NOT emit")
+# anything else is a regression. Matched case-insensitively so that both "retired"
+# and the corpus-canonical "Retired values" phrasing (concept-graph.md §2.4) count as
+# ban notices — casing is irrelevant to the ban-notice intent.
+_ALLOW_MARKERS = ("retired", "do not emit")
 
 
 def spec_files():
@@ -30,7 +33,7 @@ class TestRetiredTierVocabulary(unittest.TestCase):
         for f in spec_files():
             for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
                 if any(tok in line for tok in ("✅✅", "🔴", "Critical Blind", "Critical column")):
-                    if not any(m in line for m in _ALLOW_MARKERS):
+                    if not any(m in line.lower() for m in _ALLOW_MARKERS):
                         offenders.append(f"{f.relative_to(REPO)}:{i}: {line.strip()[:80]}")
         self.assertEqual(offenders, [],
                          "retired ✅/🔴 coverage vocabulary resurfaced:\n" + "\n".join(offenders))
@@ -329,6 +332,53 @@ class TestAnalyzeFanOut(unittest.TestCase):
                          "SKILL.md must not contain banned cadence string")
         self.assertNotIn("after batch 1 completes, immediately write", self.analyze,
                          "analyze.md must not contain banned cadence string")
+
+    # AC-15 — batch-1 emit-time self-check contract (FND-002 / T-ANALYZE-FIRSTBATCH-RESUME).
+    def test_batch1_emit_time_selfcheck(self):
+        """analyze.md must mandate an emit-time self-check that batch-1 file count ≤ min(4, N).
+
+        Pins the observable contract upgrade: symbolic 'min(FIRST_BATCH_CAP, N)' in the batch
+        header template is insufficient because an LLM agent can ignore it and emit b=10.
+        The spec must require the agent to compute b = min(4, N), verify the list length ≤ b
+        BEFORE streaming the header, and truncate/carry-over if violated.
+        """
+        # The self-check obligation must be stated explicitly.
+        has_selfcheck = (
+            "self-check" in self.analyze.lower() or
+            "emit-time" in self.analyze.lower() or
+            "before streaming" in self.analyze.lower()
+        )
+        self.assertTrue(has_selfcheck,
+                        "analyze.md must mandate an emit-time self-check before the batch-1 "
+                        "header is streamed (verify file count ≤ min(4, N))")
+        # The upper bound of 4 must be stated explicitly.
+        has_upper_bound = (
+            "min(4, N)" in self.analyze or
+            "≤ 4" in self.analyze or
+            "<= 4" in self.analyze
+        )
+        self.assertTrue(has_upper_bound,
+                        "analyze.md must state the concrete batch-1 upper bound as min(4, N) "
+                        "(FIRST_BATCH_CAP = 3–4; the ceiling is 4)")
+        # The contract violation consequence must be named in both languages.
+        self.assertIn("contract violation", self.analyze,
+                      "analyze.md must name batch-1 b > min(4,N) as a 'contract violation'")
+        # en violation text.
+        has_en_violation = (
+            "contract violation" in self.analyze and
+            ("Batch-1 must contain" in self.analyze or "batch-1 header" in self.analyze.lower())
+        )
+        self.assertTrue(has_en_violation,
+                        "analyze.md must carry an English batch-1 contract-violation statement")
+        # ko violation text.
+        has_ko_violation = (
+            "배치-1" in self.analyze or "배치 1" in self.analyze
+        ) and (
+            "계약 위반" in self.analyze or "위반" in self.analyze
+        )
+        self.assertTrue(has_ko_violation,
+                        "analyze.md must carry a Korean batch-1 contract-violation statement "
+                        "(i18n requirement for en·ko)")
 
 
 class TestLogToolOverride(unittest.TestCase):
@@ -632,12 +682,31 @@ class TestGraphCommand(unittest.TestCase):
         self.assertIn("C1", self.graph,
                       "graph.md must reference the C1..Cn ID scheme")
 
-    def test_graph_no_fan_out_by_default(self):
-        """Default path must NOT fan out to converted/ — index-shortcut only."""
-        self.assertIn("index", self.graph.lower(),
-                      "graph.md must describe the index-shortcut default path")
+    def test_graph_no_parallel_fan_out_by_default(self):
+        """Default PHASE A reads converted/ sequentially; --rebuild gates parallel fan-out.
+
+        The old intent ('index-shortcut only, no converted/ reads by default') is superseded:
+        PHASE A always reads converted/ files sequentially as the primary extraction path.
+        The --rebuild flag gates the *parallel* fan-out cross-validation pass only (FND-029).
+        This test pins the corrected contract so the stale 'index-shortcut-only' wording
+        cannot re-surface and mislead future agents.
+        """
+        # --rebuild must still be present as the parallel fan-out gate.
         self.assertIn("--rebuild", self.graph,
-                      "graph.md must gate converted/ fan-out behind --rebuild flag")
+                      "graph.md must reference --rebuild as the parallel fan-out gate (FND-029)")
+        # The distinction between sequential read (default PHASE A) and parallel fan-out
+        # (--rebuild only) must be explicit.
+        has_sequential_distinction = (
+            "sequential" in self.graph.lower() and
+            ("parallel fan-out" in self.graph.lower() or "parallel" in self.graph.lower())
+        )
+        self.assertTrue(has_sequential_distinction,
+                        "graph.md must distinguish sequential PHASE A reads (default) from "
+                        "parallel fan-out (--rebuild only) — the old 'index-shortcut-only' "
+                        "default is superseded by the PHASE A pipeline (FND-029)")
+        # document-order ID assignment must still be stated.
+        self.assertIn("document", self.graph.lower(),
+                      "graph.md must specify document-order ID assignment")
 
 
 class TestManifestConsistency(unittest.TestCase):
@@ -747,6 +816,284 @@ class TestReindexCommand(unittest.TestCase):
         """INTERFACE_LANG must be referenced."""
         self.assertIn("INTERFACE_LANG", self.reindex,
                       "reindex.md must reference INTERFACE_LANG for output language")
+
+
+class TestGraphSkill(unittest.TestCase):
+    """Spec-lint: /paideia:graph skill deployment contract (P08 blocking defect).
+
+    Pins:
+    - graph.md loads concept-graph.md skill (the P08 blocking defect core)
+    - graph.md carries §2.2 contract headers (## Nodes, ## Prerequisite edges, ## Cross-links)
+    - concept-graph.md skill file exists in the clone
+    - concept-graph.md carries §2.4 four-check vocabulary
+    - Single mermaid fence rule and wikilink-in-label prohibition are present
+    - Forked clone schema (## Concepts (C1..CN)) is absent
+    """
+
+    def setUp(self):
+        self.graph = (COMMANDS / "graph.md").read_text(encoding="utf-8")
+        self.concept_graph_skill_path = SKILLS / "course-builder" / "concept-graph.md"
+
+    # GS-1 — graph.md loads the concept-graph skill (the P08 blocking defect core).
+    def test_graph_loads_concept_graph_skill(self):
+        """graph.md must Load concept-graph.md so /paideia:graph can read the contract."""
+        self.assertIn("Load `skills/course-builder/concept-graph.md`", self.graph,
+                      "graph.md must contain 'Load `skills/course-builder/concept-graph.md`' "
+                      "(P08 blocking defect: skill was not loaded, so graph could not read the contract)")
+
+    # GS-2 — graph.md loads SKILL.md as well (defense in depth — already in corpus).
+    def test_graph_loads_skill_md(self):
+        """graph.md must Load SKILL.md alongside concept-graph.md."""
+        self.assertIn("Load `skills/course-builder/SKILL.md`", self.graph,
+                      "graph.md must Load SKILL.md (corpus graph.md loads both skills)")
+
+    # GS-3 — §2.2 contract headers present in graph.md.
+    def test_graph_has_nodes_table_header(self):
+        """graph.md must carry the §2.2 ## Nodes table header."""
+        self.assertIn("## Nodes", self.graph,
+                      "graph.md must contain '## Nodes' (§2.2 contract table header)")
+
+    def test_graph_has_prerequisite_edges_header(self):
+        """graph.md must carry the §2.2 ## Prerequisite edges table header."""
+        self.assertIn("## Prerequisite edges", self.graph,
+                      "graph.md must contain '## Prerequisite edges' (§2.2 contract table header)")
+
+    def test_graph_has_cross_links_header(self):
+        """graph.md must carry the §2.2 ## Cross-links table header."""
+        self.assertIn("## Cross-links", self.graph,
+                      "graph.md must contain '## Cross-links' (§2.2 contract table header)")
+
+    def test_graph_has_7col_node_table_columns(self):
+        """graph.md must carry the 7-column node table column identifiers."""
+        for col in ("id", "Tier", "Type", "Confidence"):
+            self.assertIn(col, self.graph,
+                          f"graph.md must carry column header '{col}' (§2.2 7-column Nodes table)")
+
+    # GS-4 — concept-graph.md skill file exists in the clone.
+    def test_concept_graph_skill_exists(self):
+        """concept-graph.md must exist as a deployable skill file in the clone."""
+        self.assertTrue(self.concept_graph_skill_path.exists(),
+                        f"skills/course-builder/concept-graph.md must exist in the clone "
+                        f"(P08 blocking defect: file was absent from clone/cache, "
+                        f"so graph.md Load target did not resolve)")
+
+    # GS-5 — concept-graph.md carries §2.4 four-check vocabulary.
+    def test_concept_graph_skill_has_four_checks(self):
+        """concept-graph.md must contain all four §2.4 validation check identifiers."""
+        skill_text = self.concept_graph_skill_path.read_text(encoding="utf-8")
+        for check_id in ("edge_id_existence", "acyclicity", "tier_vocabulary", "confidence_range"):
+            self.assertIn(check_id, skill_text,
+                          f"concept-graph.md must contain §2.4 check identifier '{check_id}'")
+
+    # GS-6 — concept-graph.md §2.2 schema present.
+    def test_concept_graph_skill_has_schema_headers(self):
+        """concept-graph.md must contain the §2.2 contract schema headers."""
+        skill_text = self.concept_graph_skill_path.read_text(encoding="utf-8")
+        for header in ("## Nodes", "## Prerequisite edges", "## Cross-links", "## Rendered graph"):
+            self.assertIn(header, skill_text,
+                          f"concept-graph.md skill must contain schema header '{header}'")
+
+    # GS-7 — single mermaid fence rule present in graph.md.
+    def test_graph_single_fence_rule_present(self):
+        """graph.md must mandate exactly one closing fence (FND-023 regression guard)."""
+        has_single_rule = ("exactly one" in self.graph and "fence" in self.graph)
+        has_double_ban = ("second" in self.graph.lower() and "fence" in self.graph.lower())
+        self.assertTrue(has_single_rule or has_double_ban,
+                        "graph.md must carry single-fence rule or double-fence prohibition (FND-023)")
+
+    # GS-8 — wikilink-in-mermaid-label prohibition present in graph.md.
+    def test_graph_no_wikilink_in_mermaid_label(self):
+        """graph.md must prohibit wikilinks inside mermaid labels (subgraph syntax collision)."""
+        has_prohibition = (
+            ("mermaid" in self.graph.lower() and "[[" in self.graph and
+             ("subgraph" in self.graph.lower() or "금지" in self.graph or
+              "Do NOT add" in self.graph or "do not" in self.graph.lower()))
+        )
+        self.assertTrue(has_prohibition,
+                        "graph.md must prohibit [[wikilinks]] inside mermaid labels "
+                        "(mermaid treats [[ as subgraph syntax)")
+
+    # GS-9 — forked clone schema (## Concepts (C1..CN)) must be absent.
+    def test_graph_no_forked_clone_schema(self):
+        """graph.md must NOT contain the forked 4-column clone schema header."""
+        self.assertNotIn("## Concepts (C1..CN)", self.graph,
+                         "graph.md must not contain the forked clone schema '## Concepts (C1..CN)' "
+                         "(clone schema is incompatible with parseConceptGraph; corpus 7-col schema required)")
+
+    # GS-10 — concept-graph.md skill has PAIDEIA contract invariants (6-key contract note, PLOM ban).
+    def test_concept_graph_skill_plom_exclusion(self):
+        """concept-graph.md must explicitly exclude PLOM (BKT/Bandit/CP-SAT)."""
+        skill_text = self.concept_graph_skill_path.read_text(encoding="utf-8")
+        has_plom_ban = (
+            "BKT" in skill_text or
+            "Bandit" in skill_text or
+            "CP-SAT" in skill_text or
+            "PLOM" in skill_text
+        )
+        self.assertTrue(has_plom_ban,
+                        "concept-graph.md must reference PLOM exclusion (BKT/Bandit/CP-SAT 금지)")
+
+    def test_concept_graph_skill_six_key_contract_note(self):
+        """concept-graph.md must note that the 6-key append-only contract is unaffected."""
+        skill_text = self.concept_graph_skill_path.read_text(encoding="utf-8")
+        self.assertIn("6-key", skill_text,
+                      "concept-graph.md must note the 6-key append-only contract is unaffected")
+
+    # GS-13 — ## Nodes Concept cell must be emitted in INTERFACE_LANG (FND-018 regression guard).
+    def test_graph_nodes_concept_cell_interface_lang(self):
+        """graph.md must mandate that the Concept cell in ## Nodes is emitted in INTERFACE_LANG.
+
+        FND-018 observed that an en-course concept-graph had Korean node labels ('사다리연산자')
+        because graph.md did not explicitly contract the Concept cell language. This test pins
+        the corrected contract: Concept cell prose = $INTERFACE_LANG, so en courses produce
+        English labels and ko courses produce Korean labels.
+        """
+        # The language contract for the Concept cell must be stated.
+        has_concept_lang = (
+            "Concept" in self.graph and
+            "INTERFACE_LANG" in self.graph and
+            (
+                "Concept` cell" in self.graph or
+                "Concept` column" in self.graph or
+                "node label" in self.graph.lower() or
+                "Node label language" in self.graph
+            )
+        )
+        self.assertTrue(has_concept_lang,
+                        "graph.md must contract that the Concept cell in ## Nodes is emitted "
+                        "in $INTERFACE_LANG (FND-018: en courses produced Korean labels because "
+                        "this contract was absent)")
+        # The en-label example must be distinguished from a ko-label counter-example.
+        has_en_ko_distinction = (
+            ("en" in self.graph.lower() or "english" in self.graph.lower()) and
+            ("ko" in self.graph.lower() or "korean" in self.graph.lower() or "한국어" in self.graph)
+        )
+        self.assertTrue(has_en_ko_distinction,
+                        "graph.md must show the en/ko distinction for node label language "
+                        "(e.g. 'if INTERFACE_LANG is en, concept names must be in English')")
+
+    # GS-11 — cache copy must not silently drift from the clone (test-harness gotcha).
+    #
+    # `claude -p` resolves /paideia: from the installed marketplace cache, NOT from
+    # --plugin-dir (see memory paideia-test-harness). GS-4 pins that the skill exists in
+    # the *clone*; but acceptance ("/paideia:graph can load its skill under claude -p")
+    # is only met if the *cache* copy exists AND matches the clone. This test detects the
+    # stale-cache drift that let gates go green while acceptance was unmet (P08).
+    #
+    # The cache path is machine-local; on CI / other machines it is absent, so this test
+    # is a conditional (skip-when-absent) drift guard — it never fails for portability,
+    # only when a real cache is present and has drifted from the clone.
+    def test_concept_graph_skill_cache_matches_clone(self):
+        """If the plugin cache is present, its concept-graph.md must exist and equal the clone."""
+        cache_root = (
+            Path.home()
+            / ".claude" / "plugins" / "cache"
+            / "paideia-marketplace" / "paideia" / "0.9.0"
+        )
+        if not cache_root.is_dir():
+            self.skipTest("plugin cache absent (CI / non-dev machine) — clone/cache drift guard N/A")
+        cache_skill = cache_root / "skills" / "course-builder" / "concept-graph.md"
+        self.assertTrue(
+            cache_skill.exists(),
+            "concept-graph.md is missing from the plugin cache — /paideia:graph under "
+            "claude -p (which reads the cache, not --plugin-dir) cannot load its skill. "
+            "Run sync-plugin.sh to sync clone -> cache (P08 stale-cache drift).",
+        )
+        self.assertEqual(
+            cache_skill.read_text(encoding="utf-8"),
+            self.concept_graph_skill_path.read_text(encoding="utf-8"),
+            "cache concept-graph.md has drifted from the clone — re-run sync-plugin.sh "
+            "so claude -p exercises the patched skill (P08 clone/cache drift).",
+        )
+
+    # GS-12 — cache graph.md must carry the Load directive (stale-cache command drift).
+    def test_graph_cache_has_load_directive(self):
+        """If the cache is present, its graph.md must Load the concept-graph skill (not a stale copy)."""
+        cache_graph = (
+            Path.home()
+            / ".claude" / "plugins" / "cache"
+            / "paideia-marketplace" / "paideia" / "0.9.0"
+            / "commands" / "graph.md"
+        )
+        if not cache_graph.exists():
+            self.skipTest("plugin cache absent (CI / non-dev machine) — command drift guard N/A")
+        self.assertIn(
+            "Load `skills/course-builder/concept-graph.md`",
+            cache_graph.read_text(encoding="utf-8"),
+            "cache graph.md lacks the 'Load `skills/course-builder/concept-graph.md`' directive "
+            "— a stale cache copy would leave the P08 defect reproducible under claude -p. "
+            "Run sync-plugin.sh.",
+        )
+
+
+class TestAnalyzeOrphanCleanup(unittest.TestCase):
+    """Spec-lint: analyze.md orphan .partial active cleanup contract (P04·P05·P07·P08·P10·P11).
+
+    Pins the orphan cleanup provisions added in rc.29:
+    - Analyze actively deletes orphan .partial scratch files (not just forbids them)
+    - i18n en+ko cleanup progress lines are present
+    - First-batch solutions/homework priority recommendation is present
+    - Committed-state invariant (final 3 files exist, zero .partial) is stated
+    """
+
+    def setUp(self):
+        self.analyze = (COMMANDS / "analyze.md").read_text(encoding="utf-8")
+
+    # OC-1 — active orphan deletion before each batch's .partial writes.
+    def test_analyze_active_orphan_deletion(self):
+        """analyze.md must specify active deletion of orphan .partial files (not just prohibition)."""
+        has_delete = (
+            "delete" in self.analyze.lower() or
+            "삭제" in self.analyze
+        )
+        has_orphan = "orphan" in self.analyze.lower()
+        self.assertTrue(has_delete and has_orphan,
+                        "analyze.md must specify active deletion of orphan .partial scratch files "
+                        "(prior implementation only forbade them; active cleanup is required)")
+
+    # OC-2 — resume entry orphan cleanup.
+    def test_analyze_resume_orphan_cleanup(self):
+        """analyze.md resume entry must delete orphan .partial files before fan-out."""
+        self.assertIn("orphan", self.analyze.lower(),
+                      "analyze.md must reference orphan .partial cleanup on resume entry")
+
+    # OC-3 — i18n en cleanup progress line.
+    def test_analyze_orphan_cleanup_en_message(self):
+        """analyze.md must contain the English orphan cleanup progress line."""
+        self.assertIn("Cleaned", self.analyze,
+                      "analyze.md must contain English orphan cleanup message 'Cleaned … orphan .partial'")
+        self.assertIn("orphan .partial", self.analyze,
+                      "analyze.md must reference 'orphan .partial' in the cleanup message")
+
+    # OC-4 — i18n ko cleanup progress line.
+    def test_analyze_orphan_cleanup_ko_message(self):
+        """analyze.md must contain the Korean orphan cleanup progress line."""
+        self.assertIn("orphan .partial 스크래치", self.analyze,
+                      "analyze.md must contain Korean orphan cleanup message "
+                      "'orphan .partial 스크래치 … 정리'")
+
+    # OC-5 — committed-state invariant: final files exist + zero .partial.
+    def test_analyze_committed_state_invariant(self):
+        """analyze.md must state the committed-state invariant: 3 finals exist, zero .partial."""
+        has_zero_partial = (
+            "Zero `.partial`" in self.analyze or
+            "zero .partial" in self.analyze.lower() or
+            "Zero .partial" in self.analyze
+        )
+        self.assertTrue(has_zero_partial,
+                        "analyze.md must state the committed-state invariant: zero .partial files remain")
+
+    # OC-6 — first-batch solutions/homework priority recommendation.
+    def test_analyze_first_batch_solutions_priority(self):
+        """analyze.md must recommend solutions/homework files for batch-1 to produce rich patterns."""
+        has_solutions_pref = (
+            "solutions" in self.analyze.lower() and
+            "homework" in self.analyze.lower() and
+            ("batch-1" in self.analyze or "first batch" in self.analyze.lower())
+        )
+        self.assertTrue(has_solutions_pref,
+                        "analyze.md must recommend solutions/homework files for batch-1 "
+                        "(prevents 0-pattern-card first batch on lecture-only selections)")
 
 
 if __name__ == "__main__":

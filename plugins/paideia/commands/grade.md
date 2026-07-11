@@ -175,11 +175,29 @@ Follow the answer-processing skill pipeline:
    JSON
    ```
 
+   **Single-call enforcement (T-VERIFY-PARSER-FALLBACK Arm 2):** `verify_tool.py` is called **exactly once** per grade run — all checkable steps are batched into the single JSON payload above. Do NOT call `verify_tool.py` again under any circumstance after this batch call completes (NO retry loop, NO re-call with modified inputs, NO per-step re-invocations). Re-calling `verify_tool.py` after receiving results is a contract violation that breaks the 290 s timeout budget and produces inconsistent verify_mode within a single grade run.
+
    - `verify_tool.py` reads from stdin and writes `{"results":[{"id":"s1","result":"pass"|"fail"|"timeout"|"unparsable"},…]}` to stdout.
-   - **Exit 3** = math-verify absent → skip symbolic verification entirely, fall back to LLM-only strategy grading (honest demotion, analogous to OCR-tier demotion above). Do NOT install math-verify mid-run; note the demotion in the grade table.
+   - **Exit 3** = math-verify absent → this is a distinct trigger from the unparsable-ratio demotion below; skip symbolic verification entirely, fall back to LLM-only strategy grading (honest demotion, analogous to OCR-tier demotion above). Do NOT install math-verify mid-run; note the demotion in the grade table.
    - Any other non-zero exit → treat all results as `"unparsable"`.
 
-   **Reconciliation rule (SymPy overrides LLM for checkable steps):**
+   **Unparsable-ratio demotion (T-VERIFY-PARSER-FALLBACK Arm 2 — distinct from exit-3 demotion above):**
+   After receiving the single `verify_tool.py` result set, compute:
+   ```
+   unparsable_ratio = count("unparsable" in results) / len(checkable_steps)
+   ```
+   If `unparsable_ratio > 0.5` (i.e., more than half of checkable steps returned `"unparsable"`):
+   - Immediately demote this grade run to `verify_mode: "llm-only"`.
+   - Set all SymPy column values to `n/a`; set badge `checks: []`, `verify_reachable: false` (per 4c Recording rules).
+   - Output exactly one demotion badge line **above the grade table** in `$INTERFACE_LANG`:
+     > (en) "Symbolic verify produced too many unparsable checks — demoting to LLM-only for this grade (no retry)."
+     > (ko) "기호 검산 unparsable 비율 초과 — 이번 채점은 LLM 단독으로 강등(재시도 없음)."
+   - **Do NOT re-call `verify_tool.py`.** Proceed immediately to step 4c then step 5, exiting within the 290 s budget.
+   - This demotion is triggered by math-verify being installed but returning too many `"unparsable"` results. It is separate from the exit-3 demotion (math-verify absent) handled in 4b-pre above. Both demotions write an honest llm-only badge; they differ only in trigger.
+
+   If `unparsable_ratio ≤ 0.5`, proceed with reconciliation normally (no demotion).
+
+   **Reconciliation rule (SymPy overrides LLM for checkable steps — applies only when not demoted):**
    - `result = "pass"` → step verdict = `"correct"` (overrides LLM)
    - `result = "fail"` → step verdict = `"wrong"` (overrides LLM)
    - `result = "timeout"` or `"unparsable"` → keep LLM verdict unchanged

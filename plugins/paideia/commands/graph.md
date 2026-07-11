@@ -1,120 +1,182 @@
 ---
-description: Generate a concept-graph on a built course-index — mermaid node/edge graph with node labels in the course INTERFACE_LANG, deterministic document-order IDs, and Obsidian-interoperable wikilinks alongside custom IDs.
-argument-hint: "[--rebuild to re-read converted/ instead of index-shortcut]"
+description: Extract prerequisite concept graph from converted course materials and write course-index/concept-graph.md.
+argument-hint: "[--force]"
 ---
 
 ## Output language
 
-Node labels (concept name prose) are rendered in `$INTERFACE_LANG` (from `.course-meta`). Node IDs (`C1`..`Cn`), mermaid keywords (`graph TD`, `-->`, `---`), wikilink anchors (`[[…]]`), `§`/`Pk` tokens, and structural identifiers stay in English regardless of `$INTERFACE_LANG`.
+Read `INTERFACE_LANG` from `.course-meta` (default `en`). All user-facing prose must be in that language.
 
-This separation is intentional: node labels are canonical data generated in `$INTERFACE_LANG` — not a read-time translation layer applied on top of English data. The resulting `concept-graph.md` is the authoritative INTERFACE_LANG render.
+Keep verbatim regardless of `INTERFACE_LANG`: file paths, slash command names, concept IDs (C1..Cn), pattern IDs (P1..Pk), tier markers (🔥🔥/🔥/🟡/⚪) and `⚠weak`, § / Ch section anchors, column headers (`Concept`, `id`, `§`, `Patterns`, `Tier`, `Type`, `Source`, `From`, `To`, `Confidence`, `Rationale`, `A`, `B`, `Relation`).
 
-## Prerequisites
+Load `skills/course-builder/SKILL.md`.
+Load `skills/course-builder/concept-graph.md`.
 
-**Built course-index required.** Before running:
-- `course-index/patterns.md` must exist
-- `course-index/coverage.md` must exist (for section ordering)
+Arguments: $ARGUMENTS
 
-If either is absent, stop and print (in `$INTERFACE_LANG`):
+## Prerequisite check
 
-> No built course-index found. Run `/paideia:analyze` first to build the index, then retry `/paideia:graph`.
+Verify that `converted/` exists and contains at least one `.md` file. If empty, tell the user to run `/ingest` first and stop.
 
-Do not attempt concept extraction from `converted/` without an explicit `--rebuild` flag.
+If `course-index/concept-graph.md` exists and `--force` is not passed, show the focus question and node count, then ask whether to overwrite. (Idempotent: re-running with `--force` overwrites without prompting.)
 
-## PHASE A — Concept extraction
+## Extraction pipeline
 
-### Default path: index-shortcut (no fan-out)
+Follow PHASE A → B → C → D → E in order. Do not skip phases. Do not add optimization logic (no BKT, CP-SAT, Bandit, BLIM — PLOM exclusion, doc 04 §0.4).
 
-Read only the built index files — **this is the canonical, explicitly sanctioned path for concept extraction**:
-1. `course-index/summary.md` — topic tree (section headings, subsection hierarchy)
-2. `course-index/patterns.md` — recurring patterns (P1..PN), their associated sections, and inter-pattern relationships stated in the cards
+### PHASE A — Candidate concept mining (sLLM tier, bulk repetition)
 
-Extract concepts and relationships from these two files only. Do not read `converted/` files in this path.
+For each file in `converted/` (lectures, textbook, notes in document order):
 
-**Why index-shortcut is legitimate:** the index is already a distillation of the course — patterns.md captures the recurring technique graph and summary.md captures the section-concept hierarchy. Fan-out to raw converted files would replicate the analyze timeout (T-ANALYZE-WINDOW / FND-002) with no additional precision for graph structure.
+1. Read the file text.
+2. Emit candidate concepts with a minimal prompt (no explanation, comma-separated prerequisites only):
 
-### Alternate path: `--rebuild` (fan-out)
+   ```
+   You are an education expert. List the key concepts DEFINED in this text as a JSON array:
+   [{"concept": "<name>", "defined_here": true|false, "section": "<§ or Ch>", "first_line": <int>, "refs": ["<concept>"]}, ...]
+   Emit JSON only. No prose.
+   ```
 
-When `--rebuild` is given, read `converted/**/*.md` (one file at a time, sequentially — no parallel fan-out, to stay within window) and extract concept mentions for cross-validation against the index-shortcut results. Merge: index-shortcut takes precedence for structure; raw converted adds any concept not captured in the index.
+3. Collect all candidates across files. Track `def(X)` = the file/line of first full definition, and `ref(B→A)` = count of times file B mentions concept A.
 
-`--rebuild` is a supplementary accuracy pass, not the primary path.
+### PHASE B — Normalisation and ID assignment
 
-### Concept selection criteria
+1. String-normalise candidates (lowercase, strip articles, collapse whitespace). Merge near-duplicates by edit distance ≤ 2 or exact synonym (e.g. "eigenvalue" = "eigen value").
+2. Assign sequential IDs: `C1`, `C2`, … in order of first-definition appearance across files.
+3. For each node, join:
+   - `§`: the section anchor from the source file (use `source_path` header `<!-- SOURCE: ... §X.Y -->` if present)
+   - `Patterns`: cross-reference `course-index/patterns.md` — list Pk IDs whose **Appears in** overlaps with this concept's §
+   - `Source`: the relative path of the file where the concept is first defined
+   - `Type`: `procedural` if the concept maps to ≥ 1 Pk that is a solution technique; otherwise `conceptual`
 
-A concept node C_i is a **named, reusable idea** that appears in two or more sections OR is the primary subject of a pattern card. Narrow algebraic steps (e.g., "multiply both sides by 2") are not concept nodes. Examples of concept nodes: "Eigenvalue decomposition", "Green's theorem", "Fourier series convergence".
+### PHASE C — Prerequisite edge proposal (structural priors first, LLM for ambiguous pairs only)
 
-### ID assignment — document order (deterministic)
+Apply RefD-style structural priors to propose edges. For each ordered pair (A, B) where A ≠ B:
 
-Assign IDs `C1`, `C2`, … `Cn` in the **document order** of the source:
-- Default path: topic-tree order in `summary.md` (first appearance of the concept in the topic tree defines its document-order position)
-- `--rebuild` path: first appearance in the concatenated converted file sequence (lexicographic file order)
+- **Prior-positive edge A→B** (A is prerequisite of B) if:
+  - `def(A) < def(B)` (A defined before B in document order), **AND**
+  - `ref(B→A) > ref(A→B)` (B's file mentions A more than A's file mentions B)
 
-**Never re-assign IDs** based on centrality, frequency, or any non-deterministic ordering. The same course run twice must produce the same ID assignment.
+Accept all prior-positive edges with `confidence: 0.75` without calling the LLM.
 
-## PHASE B — Graph assembly
-
-Build the mermaid graph as follows:
+For pairs where the prior is ambiguous (neither dominates), or where `def(A)` ≈ `def(B)` (same §), call the reasoning LLM once per ambiguous pair:
 
 ```
-graph TD
-    C1["<label in INTERFACE_LANG> [[<concept name>]]"]
-    C2["<label> [[<concept name>]]"]
-    …
-    C1 --> C2
-    C3 --- C1
+Given two concepts in a course:
+  Concept A: "<name>" defined in <§A>
+  Concept B: "<name>" defined in <§B>
+Decide: is A a prerequisite of B, B a prerequisite of A, or neither?
+Respond JSON: {"from": "A"|"B"|null, "confidence": 0.0..1.0, "rationale": "<one sentence>"}
 ```
 
-**Node format:** each node line must include both the document-order C-ID and an Obsidian wikilink:
-```
-C1["Eigenvalue Decomposition [[Eigenvalue Decomposition]]"]
-```
+Discard edges with `confidence < 0.5`.
 
-The wikilink `[[concept name]]` uses the concept name in `$INTERFACE_LANG` for interoperability with an Obsidian vault pointed at the course folder.
+### PHASE D — DAG enforcement (Tarjan SCC → Kahn topo-sort)
 
-**Edge types:**
-- `-->` (directed): concept A is a prerequisite for, or leads to, concept B
-- `---` (undirected): concepts are closely related without a clear directional dependency
+1. Run Tarjan's SCC on the proposed edge set.
+2. For each non-trivial SCC (size > 1):
+   - If the concepts are near-synonyms (edit distance ≤ 2 or same root), merge them into the node with the lower-numbered Cx id and redirect edges.
+   - Otherwise remove the lowest-confidence edge in the cycle to break it. Log the removed edge.
+3. Verify the graph is now a DAG by running Kahn's topological sort. If any node is not reachable from the sort (still a cycle), repeat step 2.
+4. The final edge set must produce a complete topological order across all nodes.
 
-**Single mermaid fence — strict rule:** the output file must contain **exactly one** opening ` ```mermaid ` fence and **exactly one** closing ` ``` ` fence. Do NOT emit two consecutive closing fences. Double-fence is a known defect (FND-023) and must not be reproduced. Before writing the file, verify the fence count: `opening ` ```mermaid ` = 1`, `closing ` ``` ` = 1`.
+### PHASE E — Exam-signal join and write
 
-## Output: `course-index/concept-graph.md`
+1. For each node, join `Tier` from `course-index/coverage.md`:
+   - Match by `§` value. Use the tier of the matching row. If the § is not in `coverage.md`, assign `⚪`.
+2. Build the mermaid block for the `## Rendered graph` section (render-only, not parsed):
+   - Use `flowchart TD`. One line per edge: `Cx["<concept> · <§> · <tier emoji>"] --> Cy`.
+   - Bold `foundationalCracks` nodes by wrapping label in `**`: `Cx["**<concept>** · <§> · 🔥🔥"]`.
+   - **Closing fence rule**: The mermaid block MUST be closed with **exactly one** ` ``` ` fence line. Emitting a second or trailing fence is a producer error. / mermaid 블록은 닫는 ` ``` `를 **정확히 1개**만 발행. 잉여 펜스 금지.
+   - **Wikilink option (Obsidian interop)**: When `INTERFACE_LANG` is any value, the `Concept` cell in the `## Nodes` table MAY be wrapped in a wikilink: `[[<concept name>]]`. The parser (`parseConceptGraph`) is unaffected — it reads the `Concept` cell as a raw string and passes `zod .min(1)`, so `[[Eigenvalue]]` is a valid cell value. Do NOT add wikilinks inside mermaid labels — mermaid treats `[[` as a subgraph syntax and will break rendering. / `Concept` 셀은 `[[이름]]` 위키링크로 감쌀 수 있음(파서 무영향). mermaid 라벨에는 위키링크 금지.
+3. Write `course-index/concept-graph.md` with the schema below.
 
-Write to `course-index/concept-graph.md`. If the file already exists, overwrite (this command is idempotent — run again after index updates).
+**Language (reaffirms Output language header):** The `Focus question` sentence, `Rationale` cell prose in Prerequisite edges, and `Relation` cell prose in Cross-links must be in `$INTERFACE_LANG`. Column headers (`From`, `To`, `Confidence`, `Rationale`, `A`, `B`, `Relation`, `Concept`, `id`, `§`, `Patterns`, `Tier`, `Type`, `Source`), concept IDs (C1..Cn), pattern IDs (P1..Pk), tier markers (🔥🔥/🔥/🟡/⚪), and `§`/`Ch` anchors stay verbatim regardless of `$INTERFACE_LANG`.
 
-File structure:
+**Node label language contract (mandatory — FND-018 fix):** The `Concept` cell prose in the `## Nodes` table MUST be emitted in `$INTERFACE_LANG`. This is canonical data, not a display-time translation: if `INTERFACE_LANG` is `en`, concept names in the `Concept` column must be in English (e.g. `Ladder operator`, not `사다리연산자`); if `ko`, they must be in Korean. The `id` column (C1..Cn), `§`, `Tier`, `Type`, `Source`, and `Patterns` columns are language-neutral and stay verbatim regardless of `$INTERFACE_LANG`. / `## Nodes` 표의 `Concept` 셀은 `$INTERFACE_LANG`로 방출 (en이면 영문, ko이면 한국어). `id`·`§`·`Tier` 등 기타 열은 언어 무관 고정.
+
+## Output schema (§2.2, verbatim — table is the contract, mermaid is render-only)
 
 ```markdown
-# Concept Graph
+# Concept Graph — <course name>
 
-<!-- Generated by /paideia:graph — document-order C-IDs, INTERFACE_LANG labels, Obsidian wikilinks. -->
-<!-- Node count: N, Edge count: E -->
+<!-- SOURCE: course-index/concept-graph.md method: llm-concept-graph, model: <engine> -->
 
-```mermaid
-graph TD
-    C1["…"]
-    …
-    C1 --> C2
+## Focus question
+
+<One sentence that frames what the graph answers, e.g. "How do eigenvalues and diagonalization relate in finite-dimensional vector spaces?">
+
+## Nodes
+
+| Concept | id | § | Patterns | Tier | Type | Source |
+|---|---|---|---|---|---|---|
+| <concept name> | C1 | §X.Y | P4, P7 | 🔥🔥 | conceptual | converted/lectures/chNN.md |
+
+## Prerequisite edges
+
+| From | To | Confidence | Rationale |
+|---|---|---|---|
+| C1 | C5 | 0.90 | <one-sentence linking phrase> |
+
+## Cross-links
+
+| A | B | Relation |
+|---|---|---|
+| C1 | C9 | <relation phrase> |
+
+## Rendered graph
+
+\`\`\`mermaid
+flowchart TD
+  C1["<concept> · <§> · <tier emoji>"] --> C5["<concept> · <§> · <tier emoji>"]
+\`\`\`
 ```
 
-## Concepts (C1..CN)
+**Contract rule**: The parser (`parseConceptGraph` in `packages/paideia-core`) reads only the `## Nodes`, `## Prerequisite edges`, and `## Cross-links` tables. The `## Rendered graph` mermaid block is ignored by the parser — it exists for human readers only.
 
-| ID | Concept | Primary § | Related Patterns |
-|----|---------|-----------|-----------------|
-| C1 | <label> | §X | P1, P3 |
-…
+## Concept heatmap (render-only, optional)
+
+**This section is render-only and is NOT parsed by `parseConceptGraph`.** It is produced by the `/paideia:graph` command after writing the contract tables, if `errors/log.md` contains at least one entry. / 이 섹션은 파서가 읽지 않는 렌더 전용 섹션이며, `errors/log.md` 엔트리가 0이면 생략.
+
+Join key: node `id`↔`Patterns` (Pk column) and `§` ↔ `errors/log.md` `pattern:` (Pk) / `source:` (§ fragment). Count per node, split by `nature:` facet (slip/misconception/gap). PLOM 금지: 관측 카운트만, BKT/Bandit/가중 추정 금지.
+
+```markdown
+## Concept heatmap
+
+> Error counts from errors/log.md joined by pattern (Pk) and § anchor.
+> / errors/log.md의 오답을 pattern(Pk)·§ 앵커로 조인한 관측 카운트.
+
+| id | Concept | Errors | Slip | Misconception | Gap |
+|---|---|---|---|---|---|
+| C1 | Eigenvalue | 3 | 1 | 2 | 0 |
+| C5 | Diagonalization | 1 | 0 | 1 | 0 |
 ```
 
-The concept table beneath the graph maps each C-ID to its primary section and the pattern cards that reference it — enabling `/paideia:pattern` cross-referencing.
+**Graceful downgrade**: If `errors/log.md` is absent or has 0 entries matching any node, omit the `## Concept heatmap` section entirely. Never emit an empty table. / errors/log.md 부재·매칭 0이면 섹션 자체 생략.
 
-## What this command does NOT do
+**i18n**: The blockquote description above should be in the course's `INTERFACE_LANG` (en prose vs. ko prose), but column headers (`id`, `Concept`, `Errors`, `Slip`, `Misconception`, `Gap`) are kept verbatim regardless of lang.
 
-- **Does not rewrite `coverage.md` or `errors/log.md`.** Graph is read-only with respect to those files. Rewriting coverage markers is `/paideia:reindex`'s responsibility.
-- **Does not force node labels to English.** Labels must follow `$INTERFACE_LANG`. An English-only label in a Korean course is a violation of this spec.
-- **Does not assign IDs by non-deterministic order.** IDs are document-order only. Index position, frequency, or centrality must not influence the assignment.
-- **Does not emit double mermaid fences.** Closing ` ``` ` appears exactly once. The assembler must not append an extra fence.
-- **Does not fan out to converted/ by default.** The default path reads only the built index. Use `--rebuild` explicitly for raw-file fan-out.
-- **Does not run `/paideia:analyze`.** If the index does not exist, instruct the user to run analyze first; do not invoke it automatically.
+## Validation (§2.4)
 
-## Idempotence
+Before writing, verify:
+1. All edge `From` and `To` values match a node `id` in the `## Nodes` table.
+2. The graph is acyclic (PHASE D guarantees this; re-check here).
+3. Every `Tier` value is one of: 🔥🔥, 🔥, 🟡, ⚪.
+4. Every `Confidence` value is a number in [0, 1].
 
-Running `/paideia:graph` twice on the same course index produces the same `concept-graph.md` (deterministic IDs, same edge set). If only `--rebuild` is given and the converted/ files changed since the last index build, the graph may differ — that is expected and intended.
+If any check fails, fix the issue (remove bad edges, correct tiers) and log the fix. Do not write a file that fails validation.
+
+## --rebuild flag (supplementary accuracy pass)
+
+When `--rebuild` is given, after completing the standard PHASE A–E pipeline above, perform an additional cross-validation pass: read `converted/**/*.md` (one file at a time, sequentially — no parallel fan-out, to stay within window) and check for any concept mentions not captured in the extracted node set. Merge any additional concepts found: the PHASE A–E results take precedence for structure; `--rebuild` adds only concepts not already present.
+
+**Fan-out vs sequential read distinction:** The standard PHASE A reads `converted/` files **sequentially** (one file at a time, in document order) — this is not a parallel fan-out and is the default behavior. `--rebuild` is a supplementary accuracy pass that performs an **additional** sequential cross-validation sweep after PHASE A–E completes. Do NOT perform **parallel fan-out** (spawning multiple concurrent read agents against `converted/`) without `--rebuild` — parallel fan-out is reserved for the rebuild pass to stay within the window constraint (FND-029). Sequential single-file reads in PHASE A are always permitted regardless of `--rebuild`.
+
+## Engine caveats
+
+- **codex**: no mid-run image reads — structural priors (PHASE C) from text only, sequential
+- **ollama-cloud**: edge confirmation quality varies by cloud model (Sonnet-class recommended for PHASE C LLM pairs)
+
+## Note on command numbering
+
+This command is registered as entry 18 in `packages/corpus/src/registry.ts`. The document §2.8 refers to it as "17th" but `/paideia:drill` already occupies slot 17 in the live registry. The code is the authoritative source; this note documents the deviation.
