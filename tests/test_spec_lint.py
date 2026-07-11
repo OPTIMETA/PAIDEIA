@@ -650,7 +650,7 @@ class TestManifestConsistency(unittest.TestCase):
 
     PLUGIN_JSON = REPO / "plugins" / "paideia" / ".claude-plugin" / "plugin.json"
     MARKETPLACE_JSON = REPO / ".claude-plugin" / "marketplace.json"
-    _SEMVER_RC_RX = re.compile(r"^1\.0\.0-rc\.\d+$")
+    _PINNED_VERSION = "0.9.0"
 
     def setUp(self):
         self.plugin = json.loads(self.PLUGIN_JSON.read_text(encoding="utf-8"))
@@ -660,9 +660,9 @@ class TestManifestConsistency(unittest.TestCase):
         )
         self.n_commands = len(list(COMMANDS.glob("*.md")))
 
-    def test_plugin_version_is_wellformed_rc(self):
-        self.assertRegex(self.plugin["version"], self._SEMVER_RC_RX,
-                         "plugin.json version must be a 1.0.0-rc.N release string")
+    def test_plugin_version_is_pinned(self):
+        self.assertEqual(self.plugin["version"], self._PINNED_VERSION,
+                         "plugin.json version is pinned at 0.9.0 (PAIDEIA manifest convention)")
 
     def test_marketplace_version_matches_plugin(self):
         self.assertEqual(self.market_entry["version"], self.plugin["version"],
